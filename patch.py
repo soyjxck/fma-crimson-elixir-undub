@@ -20,6 +20,10 @@ from racjin import compress, decompress
 
 SECTOR = 2048
 
+# SCEI sound banks that differ between USA and JP (combat barks, voice SFX)
+SCEI_BANK_INDICES = [7, 15, 34, 37, 49, 65, 293, 295, 297, 299,
+                     309, 324, 334, 336, 341, 346, 373, 377]
+
 EXPECTED_MD5 = {
     "usa": "2e79a69434561557dd0eaa9061d62eed",
     "jp":  "6804b82a9eb8d6a1e2d85a25683ec89d",
@@ -202,14 +206,66 @@ def do_undub(usa_iso_path, jp_iso_path, out_iso_path):
     xa_end = write_sector + (jp_xa_sz + SECTOR - 1) // SECTOR
     print(f"  XA.PAK: sector {write_sector} ({jp_xa_sz/1024/1024:.0f} MB)")
 
-    # --- Update CFC.DIG size ---
-    cfc_new_size = (cfc2_rel_sector + cfc2_sectors) * SECTOR
+    # =========================================================================
+    # Step 3: Combat bark SCEI banks (appended after XA.PAK)
+    # =========================================================================
+    print(f"\n{'='*60}")
+    print("Step 3: Combat bark SCEI banks")
+    print(f"{'='*60}")
+
+    banks_patched = 0
+    last_cfc_sector = cfc2_abs_sector + cfc2_sectors  # track CFC.DIG extent
+
+    if SCEI_BANK_INDICES:
+        with open(out_iso_path, 'r+b') as f:
+            for idx in SCEI_BANK_INDICES:
+                # Read JP bank data using correct JP CFC sector
+                jp_s, jp_c, jp_f, jp_d = struct.unpack('<IIII',
+                    jp_data[jp_cfc_sector*SECTOR + idx*16:jp_cfc_sector*SECTOR + idx*16 + 16])
+                if jp_s == 0 or jp_c == 0:
+                    continue
+
+                # Check if JP data actually differs from USA
+                usa_s, usa_c = struct.unpack('<II',
+                    iso_header[usa_cfc_sector*SECTOR + idx*16:usa_cfc_sector*SECTOR + idx*16 + 8])
+                # Quick check: same size = probably same data
+                if usa_c == jp_c:
+                    continue
+
+                jp_raw = jp_data[jp_cfc_sector*SECTOR + jp_s*SECTOR:
+                                 jp_cfc_sector*SECTOR + jp_s*SECTOR + jp_c]
+
+                # Append at end of ISO
+                f.seek(0, 2)  # seek to end
+                pos = f.tell()
+                new_abs_sector = (pos + SECTOR - 1) // SECTOR
+                new_rel_sector = new_abs_sector - usa_cfc_sector
+                jp_sectors = (jp_c + SECTOR - 1) // SECTOR
+
+                f.seek(new_abs_sector * SECTOR)
+                f.write(jp_raw)
+                f.write(b'\x00' * (jp_sectors * SECTOR - jp_c))
+
+                # Update CFC directory entry
+                f.seek(usa_cfc_sector * SECTOR + idx * 16)
+                f.write(struct.pack('<I', new_rel_sector))
+                f.write(struct.pack('<I', jp_c))
+                f.seek(usa_cfc_sector * SECTOR + idx * 16 + 12)
+                f.write(struct.pack('<I', jp_d))
+
+                cfc_end = new_abs_sector + jp_sectors
+                if cfc_end > last_cfc_sector:
+                    last_cfc_sector = cfc_end
+
+                print(f"  CFC[{idx:3d}]: {jp_c:>9,} bytes")
+                banks_patched += 1
+
+    print(f"  Total: {banks_patched} banks replaced")
+
+    # --- Update CFC.DIG size to cover all relocated data ---
+    cfc_new_size = (last_cfc_sector - usa_cfc_sector) * SECTOR
     with open(out_iso_path, 'r+b') as f:
         update_dir_entry(f, usa_cfc_info[0], usa_cfc_sector, cfc_new_size)
-
-    # --- Truncate ---
-    with open(out_iso_path, 'r+b') as f:
-        f.truncate(xa_end * SECTOR)
 
     # =========================================================================
     # Summary
@@ -218,11 +274,12 @@ def do_undub(usa_iso_path, jp_iso_path, out_iso_path):
     print(f"\n{'='*60}")
     print("Undub complete!")
     print(f"{'='*60}")
-    print(f"  Output:    {out_iso_path}")
-    print(f"  Size:      {final_size:,} bytes ({final_size/1024/1024:.0f} MB)")
-    print(f"  XA tracks: {changed} offsets patched")
-    print(f"  XA.PAK:    {jp_xa_sz/1024/1024:.0f} MB (full JP)")
-    print(f"  Cutscenes: 12 JP DSI files (full, no truncation)")
+    print(f"  Output:       {out_iso_path}")
+    print(f"  Size:         {final_size:,} bytes ({final_size/1024/1024:.0f} MB)")
+    print(f"  XA tracks:    {changed} offsets patched")
+    print(f"  XA.PAK:       {jp_xa_sz/1024/1024:.0f} MB (full JP)")
+    print(f"  Cutscenes:    12 JP DSI files (full, no truncation)")
+    print(f"  Combat banks: {banks_patched} SCEI banks replaced")
 
 
 def generate_xdelta(usa_iso_path, out_iso_path):
