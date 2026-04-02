@@ -11,7 +11,7 @@ If this helped you, consider [buying me a coffee](https://ko-fi.com/soyjack)
 | Cutscene dialogue (12 DSI FMVs) | Full JP video + audio (no truncation) |
 | In-game voice dialogue (XA streaming) | Japanese (2016 track offsets patched) |
 | Square Enix logo voice | Japanese (cycles by day of month) |
-| Combat voice barks | English (shared waveforms between versions) |
+| Combat voice barks | Japanese (18 SCEI banks replaced) |
 | Music / BGM | Unchanged (shared between versions) |
 | Menu / UI sound effects | Unchanged |
 
@@ -92,7 +92,7 @@ The patch was developed with the help of a **full Ghidra decompilation** of the 
 
 ## Known Limitations
 
-- Combat voice barks remain in English (shared waveform data between versions; HD program differences prevent simple BD-only swap)
+- Some combat bark samples may have slightly different timing due to different JP sound bank programs
 - 5 tracks beyond the USA XA.PAK boundary may have no audio (JP tracks at >397MB that had no USA equivalent)
 
 ## Credits
