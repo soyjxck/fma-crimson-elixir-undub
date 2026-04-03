@@ -72,6 +72,6 @@ EE (main CPU)
 2. **EXE table at 0x1780EC is NOT an XA track table** — patching it corrupts game state
 3. **CFC sub-block 1 metadata must stay USA** — JP values cause half-speed audio
 4. **CFC voice script patching (0x81 refs) caused half-speed** — removed from patch
-5. **CFC entry relocation crashes the game** — sound bank entries cannot be relocated via directory pointer changes
+5. **CFC entry relocation works but only with correct JP sector** — earlier failures were from reading JP CFC data at USA's sector offset
 6. **Ghidra decompiled stride as 8 instead of 16** — verified correct stride via MIPS assembly (`sll $v0, $s1, 4`)
 7. **Racjin compression is non-deterministic across runs** — patched data may compress to slightly different sizes
