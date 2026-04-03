@@ -2,72 +2,46 @@
 """
 FMA2 Undub Patcher
 ==================
-Replaces English audio with Japanese audio in Fullmetal Alchemist 2:
-Curse of the Crimson Elixir (USA) PS2.
 
-Usage: python3 patch.py <usa_iso> <jp_iso> [output_iso]
-       python3 patch.py --generate-xdelta <usa_iso> <jp_iso> [output_iso]
+Three ways to create the undubbed ISO:
+
+  1) Full pipeline (both ISOs + auto-builds ffmpeg + burns subtitles):
+     python3 patch.py full <usa_iso> <jp_iso> [output_iso]
+
+  2) Audio-only (both ISOs, no subs, no ffmpeg needed):
+     python3 patch.py audio <usa_iso> <jp_iso> [output_iso]
+
+  3) Apply xdelta patch (USA ISO + xdelta file):
+     python3 patch.py xdelta <usa_iso> <xdelta_file> [output_iso]
+
+Options:
+    --generate-xdelta   Also create an xdelta patch file after patching
+    --skip-verify       Skip MD5 hash verification
 """
 
 import struct
 import os
 import sys
 import shutil
-import hashlib
 import subprocess
 
 from racjin import compress, decompress
 
-SECTOR = 2048
-
-# SCEI sound banks that differ between USA and JP (combat barks, voice SFX)
-SCEI_BANK_INDICES = [7, 15, 34, 37, 49, 65, 293, 295, 297, 299,
-                     309, 324, 334, 336, 341, 346, 373, 377]
-
-EXPECTED_MD5 = {
-    "usa": "2e79a69434561557dd0eaa9061d62eed",
-    "jp":  "6804b82a9eb8d6a1e2d85a25683ec89d",
-}
+from lib.constants import (
+    SECTOR, DSI_NAMES, SCEI_BANK_INDICES, EXPECTED_MD5,
+    CFC_TRACK_TABLE_DIR_OFFSET, SUBS_DIR,
+)
+from lib.iso import find_file_entry, update_dir_entry, verify_md5
+from lib.ffmpeg import find_or_build_ffmpeg
+from lib.video import build_subtitled_dsi
 
 
-def find_file_entry(iso_data, filename):
-    """Find a file's directory entry offset, sector, and size in ISO header data."""
-    needle = filename.encode() if isinstance(filename, str) else filename
-    pos = iso_data.find(needle)
-    if pos < 0:
-        return None
-    entry = pos - 33
-    sector = struct.unpack('<I', iso_data[entry + 2:entry + 6])[0]
-    size = struct.unpack('<I', iso_data[entry + 10:entry + 14])[0]
-    return entry, sector, size
+# =============================================================================
+# Core patching
+# =============================================================================
 
-
-def update_dir_entry(f, entry_offset, sector, size):
-    """Update an ISO9660 directory entry's sector and size (both LE and BE)."""
-    f.seek(entry_offset + 2)
-    f.write(struct.pack('<I', sector))
-    f.write(struct.pack('>I', sector))
-    f.seek(entry_offset + 10)
-    f.write(struct.pack('<I', size))
-    f.write(struct.pack('>I', size))
-
-
-def verify_md5(path, label, expected):
-    """Verify ISO MD5 hash."""
-    print(f"  Verifying {label}...", end=" ", flush=True)
-    md5 = hashlib.md5()
-    with open(path, 'rb') as f:
-        while chunk := f.read(64 * 1024 * 1024):
-            md5.update(chunk)
-    digest = md5.hexdigest()
-    if digest == expected:
-        print("OK")
-        return True
-    print(f"MISMATCH (got {digest})")
-    return False
-
-
-def do_undub(usa_iso_path, jp_iso_path, out_iso_path):
+def do_audio(usa_iso_path, jp_iso_path, out_iso_path):
+    """Audio-only undub: JP XA.PAK + JP DSI + JP combat banks, no subtitles."""
     print("Reading JP ISO...")
     with open(jp_iso_path, 'rb') as f:
         jp_data = f.read()
@@ -83,22 +57,18 @@ def do_undub(usa_iso_path, jp_iso_path, out_iso_path):
     usa_cfc_info = find_file_entry(iso_header, b'CFC.DIG;1')
     usa_cfc_sector = usa_cfc_info[1]
 
-    # Find JP CFC.DIG sector (differs from USA!)
     jp_cfc_info = find_file_entry(jp_data[:10 * 1024 * 1024], b'CFC.DIG;1')
     jp_cfc_sector = jp_cfc_info[1]
 
-    # =========================================================================
-    # Step 1: Patch CFC entry 2 — XA track offset table
-    # =========================================================================
+    # --- Step 1: Patch XA track offset table ---
     print(f"\n{'='*60}")
-    print("Step 1: XA track offset table (CFC entry at dir offset 0x30)")
+    print("Step 1: XA track offset table")
     print(f"{'='*60}")
 
-    # Read and decompress the track table from both ISOs
     for label, path, cfc_sec in [("USA", usa_iso_path, usa_cfc_sector),
                                   ("JP", jp_iso_path, jp_cfc_sector)]:
         with open(path, 'rb') as f:
-            f.seek(cfc_sec * SECTOR + 0x30)
+            f.seek(cfc_sec * SECTOR + CFC_TRACK_TABLE_DIR_OFFSET)
             us, uc, uf, ud = struct.unpack('<IIII', f.read(16))
             f.seek(cfc_sec * SECTOR + us * SECTOR)
             raw = f.read(uc)
@@ -108,8 +78,6 @@ def do_undub(usa_iso_path, jp_iso_path, out_iso_path):
         else:
             jp_decomp = decompressed
 
-    # Surgical patch: replace only track offset+size (bytes 0-7 of each 16-byte entry)
-    # Keep all USA metadata (bytes 8-15) to avoid playback issues
     patched = bytearray(usa_decomp)
     changed = 0
     for t in range(2016):
@@ -121,35 +89,28 @@ def do_undub(usa_iso_path, jp_iso_path, out_iso_path):
     cfc2_comp = compress(bytes(patched))
     cfc2_sectors = (len(cfc2_comp) + SECTOR - 1) // SECTOR
     print(f"  Patched {changed}/2016 track offsets")
-    print(f"  Compressed: {len(cfc2_comp):,} bytes ({cfc2_sectors} sectors)")
 
-    # =========================================================================
-    # Step 2: Write compacted ISO layout
-    # =========================================================================
+    # --- Step 2: Write compacted ISO layout ---
     print(f"\n{'='*60}")
     print("Step 2: Write compacted ISO layout")
     print(f"{'='*60}")
 
-    # Layout: CFC.DIG (original) | CFC[2] track table | DSI | DATA0 | XA.PAK
-    write_sector = 92828  # start of free space after original CFC.DIG data
+    write_sector = 92828
 
-    # --- Track table ---
-    cfc2_abs_sector = write_sector
-    cfc2_rel_sector = cfc2_abs_sector - usa_cfc_sector
+    # Track table
+    cfc2_rel_sector = write_sector - usa_cfc_sector
     with open(out_iso_path, 'r+b') as f:
-        f.seek(cfc2_abs_sector * SECTOR)
+        f.seek(write_sector * SECTOR)
         f.write(cfc2_comp)
         f.write(b'\x00' * (cfc2_sectors * SECTOR - len(cfc2_comp)))
-        f.seek(usa_cfc_sector * SECTOR + 0x30)
+        f.seek(usa_cfc_sector * SECTOR + CFC_TRACK_TABLE_DIR_OFFSET)
         f.write(struct.pack('<I', cfc2_rel_sector))
         f.write(struct.pack('<I', len(cfc2_comp)))
     write_sector += cfc2_sectors
-    print(f"  Track table: sector {cfc2_abs_sector} ({cfc2_sectors} sectors)")
+    print(f"  Track table: {cfc2_sectors} sectors")
 
-    # --- DSI cutscenes (full JP, no truncation) ---
-    dsi_names = ['MV00','MV01','MV02','MV03','MV04','MV05',
-                 'MV06','MV07','MV08','MV09','MV10','MV11']
-    for name in dsi_names:
+    # DSI cutscenes (full JP, no truncation)
+    for name in DSI_NAMES:
         needle = f'{name}.DSI;1'.encode()
         usa_info = find_file_entry(iso_header, needle)
         jp_pos = jp_data.find(needle)
@@ -168,10 +129,10 @@ def do_undub(usa_iso_path, jp_iso_path, out_iso_path):
             update_dir_entry(f, usa_info[0], write_sector, jp_sz)
 
         file_sectors = (jp_sz + SECTOR - 1) // SECTOR
-        print(f"  {name}: sector {write_sector} ({jp_sz/1024/1024:.1f} MB)")
+        print(f"  {name}: {jp_sz/1024/1024:.1f} MB")
         write_sector += file_sectors
 
-    # --- DATA0 ---
+    # DATA0
     data0_info = find_file_entry(iso_header, b'DATA0')
     if data0_info:
         with open(out_iso_path, 'rb') as f:
@@ -183,16 +144,15 @@ def do_undub(usa_iso_path, jp_iso_path, out_iso_path):
             update_dir_entry(f, data0_info[0], write_sector, data0_info[2])
         write_sector += (data0_info[2] + SECTOR - 1) // SECTOR
 
-    # --- Full JP XA.PAK ---
+    # Full JP XA.PAK
     jp_xa_info = find_file_entry(jp_data[:10*1024*1024], b'XA.PAK;1')
     usa_xa_info = find_file_entry(iso_header, b'XA.PAK;1')
-    jp_xa_sec = jp_xa_info[1]
     jp_xa_sz = jp_xa_info[2]
 
     with open(out_iso_path, 'r+b') as f:
         f.seek(write_sector * SECTOR)
         remaining = jp_xa_sz
-        src = jp_xa_sec * SECTOR
+        src = jp_xa_info[1] * SECTOR
         while remaining > 0:
             chunk = min(remaining, 64 * 1024 * 1024)
             f.write(jp_data[src:src+chunk])
@@ -204,121 +164,193 @@ def do_undub(usa_iso_path, jp_iso_path, out_iso_path):
         update_dir_entry(f, usa_xa_info[0], write_sector, jp_xa_sz)
 
     xa_end = write_sector + (jp_xa_sz + SECTOR - 1) // SECTOR
-    print(f"  XA.PAK: sector {write_sector} ({jp_xa_sz/1024/1024:.0f} MB)")
+    print(f"  XA.PAK: {jp_xa_sz/1024/1024:.0f} MB")
 
-    # =========================================================================
-    # Step 3: Combat bark SCEI banks (appended after XA.PAK)
-    # =========================================================================
+    # --- Step 3: Combat bark SCEI banks ---
     print(f"\n{'='*60}")
     print("Step 3: Combat bark SCEI banks")
     print(f"{'='*60}")
 
     banks_patched = 0
-    last_cfc_sector = cfc2_abs_sector + cfc2_sectors  # track CFC.DIG extent
+    last_cfc_sector = 92828 + cfc2_sectors
 
-    if SCEI_BANK_INDICES:
-        with open(out_iso_path, 'r+b') as f:
-            for idx in SCEI_BANK_INDICES:
-                # Read JP bank data using correct JP CFC sector
-                jp_s, jp_c, jp_f, jp_d = struct.unpack('<IIII',
-                    jp_data[jp_cfc_sector*SECTOR + idx*16:jp_cfc_sector*SECTOR + idx*16 + 16])
-                if jp_s == 0 or jp_c == 0:
-                    continue
+    with open(out_iso_path, 'r+b') as f:
+        for idx in SCEI_BANK_INDICES:
+            jp_s, jp_c, jp_f, jp_d = struct.unpack('<IIII',
+                jp_data[jp_cfc_sector*SECTOR + idx*16:jp_cfc_sector*SECTOR + idx*16 + 16])
+            if jp_s == 0 or jp_c == 0:
+                continue
+            usa_s, usa_c = struct.unpack('<II',
+                iso_header[usa_cfc_sector*SECTOR + idx*16:usa_cfc_sector*SECTOR + idx*16 + 8])
+            if usa_c == jp_c:
+                continue
 
-                # Check if JP data actually differs from USA
-                usa_s, usa_c = struct.unpack('<II',
-                    iso_header[usa_cfc_sector*SECTOR + idx*16:usa_cfc_sector*SECTOR + idx*16 + 8])
-                # Quick check: same size = probably same data
-                if usa_c == jp_c:
-                    continue
+            jp_raw = jp_data[jp_cfc_sector*SECTOR + jp_s*SECTOR:
+                             jp_cfc_sector*SECTOR + jp_s*SECTOR + jp_c]
 
-                jp_raw = jp_data[jp_cfc_sector*SECTOR + jp_s*SECTOR:
-                                 jp_cfc_sector*SECTOR + jp_s*SECTOR + jp_c]
+            f.seek(0, 2)
+            pos = f.tell()
+            new_abs_sector = (pos + SECTOR - 1) // SECTOR
+            new_rel_sector = new_abs_sector - usa_cfc_sector
+            jp_sectors = (jp_c + SECTOR - 1) // SECTOR
 
-                # Append at end of ISO
-                f.seek(0, 2)  # seek to end
-                pos = f.tell()
-                new_abs_sector = (pos + SECTOR - 1) // SECTOR
-                new_rel_sector = new_abs_sector - usa_cfc_sector
-                jp_sectors = (jp_c + SECTOR - 1) // SECTOR
+            f.seek(new_abs_sector * SECTOR)
+            f.write(jp_raw)
+            f.write(b'\x00' * (jp_sectors * SECTOR - jp_c))
 
-                f.seek(new_abs_sector * SECTOR)
-                f.write(jp_raw)
-                f.write(b'\x00' * (jp_sectors * SECTOR - jp_c))
+            f.seek(usa_cfc_sector * SECTOR + idx * 16)
+            f.write(struct.pack('<I', new_rel_sector))
+            f.write(struct.pack('<I', jp_c))
+            f.seek(usa_cfc_sector * SECTOR + idx * 16 + 12)
+            f.write(struct.pack('<I', jp_d))
 
-                # Update CFC directory entry
-                f.seek(usa_cfc_sector * SECTOR + idx * 16)
-                f.write(struct.pack('<I', new_rel_sector))
-                f.write(struct.pack('<I', jp_c))
-                f.seek(usa_cfc_sector * SECTOR + idx * 16 + 12)
-                f.write(struct.pack('<I', jp_d))
+            cfc_end = new_abs_sector + jp_sectors
+            if cfc_end > last_cfc_sector:
+                last_cfc_sector = cfc_end
 
-                cfc_end = new_abs_sector + jp_sectors
-                if cfc_end > last_cfc_sector:
-                    last_cfc_sector = cfc_end
+            banks_patched += 1
 
-                print(f"  CFC[{idx:3d}]: {jp_c:>9,} bytes")
-                banks_patched += 1
+    print(f"  {banks_patched} banks replaced")
 
-    print(f"  Total: {banks_patched} banks replaced")
-
-    # --- Update CFC.DIG size to cover all relocated data ---
+    # Update CFC.DIG size
     cfc_new_size = (last_cfc_sector - usa_cfc_sector) * SECTOR
     with open(out_iso_path, 'r+b') as f:
         update_dir_entry(f, usa_cfc_info[0], usa_cfc_sector, cfc_new_size)
 
-    # =========================================================================
-    # Summary
-    # =========================================================================
-    final_size = os.path.getsize(out_iso_path)
+    print(f"\n  Output: {out_iso_path} ({os.path.getsize(out_iso_path)/1024/1024:.0f} MB)")
+    return jp_data, jp_cfc_sector
+
+
+def do_full(usa_iso_path, jp_iso_path, out_iso_path):
+    """Full pipeline: audio-only patching + burned English subtitles on cutscenes."""
+    jp_data, jp_cfc_sector = do_audio(usa_iso_path, jp_iso_path, out_iso_path)
+
     print(f"\n{'='*60}")
-    print("Undub complete!")
+    print("Step 4: Burn subtitles onto cutscenes")
     print(f"{'='*60}")
-    print(f"  Output:       {out_iso_path}")
-    print(f"  Size:         {final_size:,} bytes ({final_size/1024/1024:.0f} MB)")
-    print(f"  XA tracks:    {changed} offsets patched")
-    print(f"  XA.PAK:       {jp_xa_sz/1024/1024:.0f} MB (full JP)")
-    print(f"  Cutscenes:    12 JP DSI files (full, no truncation)")
-    print(f"  Combat banks: {banks_patched} SCEI banks replaced")
+
+    ffmpeg_bin = find_or_build_ffmpeg()
+    if not ffmpeg_bin:
+        print("  WARNING: ffmpeg with libass not available — skipping subtitles")
+        return
+
+    with open(out_iso_path, 'rb') as f:
+        iso_header = f.read(10 * 1024 * 1024)
+
+    for name in DSI_NAMES:
+        ass_path = os.path.join(SUBS_DIR, f'{name}.ass')
+        if not os.path.exists(ass_path):
+            continue
+        with open(ass_path) as f:
+            if 'Dialogue:' not in f.read():
+                continue
+
+        # Find current DSI location in our patched ISO
+        usa_info = find_file_entry(iso_header, f'{name}.DSI;1'.encode())
+        if not usa_info:
+            continue
+        cur_sector = usa_info[1]
+        cur_size = usa_info[2]
+
+        # Build subtitled DSI from the JP DSI currently in our ISO
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix='.dsi', delete=False) as tmp:
+            tmp_dsi = tmp.name
+            with open(out_iso_path, 'rb') as f:
+                f.seek(cur_sector * SECTOR)
+                tmp.write(f.read(cur_size))
+
+        sub_dsi = build_subtitled_dsi(ffmpeg_bin, tmp_dsi, ass_path)
+        os.unlink(tmp_dsi)
+
+        if sub_dsi is None:
+            print(f"  {name}: subtitle burn failed, keeping audio-only")
+            continue
+
+        if len(sub_dsi) <= cur_size:
+            # Fits in place
+            with open(out_iso_path, 'r+b') as f:
+                f.seek(cur_sector * SECTOR)
+                f.write(sub_dsi)
+                f.write(b'\x00' * (cur_size - len(sub_dsi)))
+                update_dir_entry(f, usa_info[0], cur_sector, len(sub_dsi))
+            print(f"  {name}: subtitled ({len(sub_dsi)/1024/1024:.1f} MB)")
+        else:
+            # Append at end
+            with open(out_iso_path, 'r+b') as f:
+                f.seek(0, 2)
+                new_sector = (f.tell() + SECTOR - 1) // SECTOR
+                f.seek(new_sector * SECTOR)
+                f.write(sub_dsi)
+                pad = (SECTOR - (len(sub_dsi) % SECTOR)) % SECTOR
+                if pad:
+                    f.write(b'\x00' * pad)
+                update_dir_entry(f, usa_info[0], new_sector, len(sub_dsi))
+            print(f"  {name}: subtitled, relocated ({len(sub_dsi)/1024/1024:.1f} MB)")
 
 
-def generate_xdelta(usa_iso_path, out_iso_path):
-    """Generate xdelta patch file."""
+# =============================================================================
+# xdelta
+# =============================================================================
+
+def do_xdelta(args):
     xdelta_bin = shutil.which('xdelta3') or shutil.which('xdelta')
     for p in ['/opt/homebrew/bin/xdelta3', '/usr/local/bin/xdelta3']:
         if not xdelta_bin and os.path.exists(p):
             xdelta_bin = p
     if not xdelta_bin:
-        print("WARNING: xdelta3 not found — install with: brew install xdelta")
+        print("ERROR: xdelta3 not found. Install: brew install xdelta")
+        sys.exit(1)
+    usa_path, xdelta_path = args[0], args[1]
+    out_path = args[2] if len(args) > 2 else 'FMA2_Undub.iso'
+    print("Applying xdelta patch...")
+    subprocess.run([xdelta_bin, '-d', '-s', usa_path, xdelta_path, out_path])
+    print(f"Done! {out_path}")
+
+
+def generate_xdelta(usa_iso_path, out_iso_path):
+    xdelta_bin = shutil.which('xdelta3') or shutil.which('xdelta')
+    for p in ['/opt/homebrew/bin/xdelta3', '/usr/local/bin/xdelta3']:
+        if not xdelta_bin and os.path.exists(p):
+            xdelta_bin = p
+    if not xdelta_bin:
+        print("WARNING: xdelta3 not found")
         return
     xdelta_path = os.path.splitext(out_iso_path)[0] + '.xdelta'
-    print(f"\nGenerating xdelta patch...")
+    print("\nGenerating xdelta patch...")
     subprocess.run([xdelta_bin, '-9', '-S', 'djw', '-f', '-e', '-s',
                     usa_iso_path, out_iso_path, xdelta_path], capture_output=True)
     if os.path.exists(xdelta_path):
         print(f"  {xdelta_path} ({os.path.getsize(xdelta_path) / (1024 * 1024):.0f} MB)")
 
 
+# =============================================================================
+# CLI
+# =============================================================================
+
 def main():
-    args = [a for a in sys.argv[1:] if not a.startswith('--')]
+    if len(sys.argv) < 3:
+        print(__doc__)
+        sys.exit(1)
+
+    mode = sys.argv[1]
+    args = [a for a in sys.argv[2:] if not a.startswith('--')]
     skip_verify = '--skip-verify' in sys.argv
     want_xdelta = '--generate-xdelta' in sys.argv
 
-    if len(args) < 2:
-        print("Fullmetal Alchemist 2 — Undub Patcher")
-        print("Usage: python3 patch.py [options] <usa_iso> <jp_iso> [output_iso]")
-        print()
-        print("Options:")
-        print("  --skip-verify       Skip MD5 hash verification")
-        print("  --generate-xdelta   Also create an xdelta patch file")
-        sys.exit(1)
-
-    usa_path = args[0]
-    jp_path = args[1]
-    out_path = args[2] if len(args) > 2 else 'FMA2_Undub.iso'
-
     print("Fullmetal Alchemist 2: Curse of the Crimson Elixir — Undub Patcher")
     print("=" * 60)
+
+    if mode == 'xdelta':
+        do_xdelta(args)
+        return
+
+    if len(args) < 2:
+        print(f"Usage: patch.py {mode} <usa_iso> <jp_iso> [output_iso]")
+        sys.exit(1)
+
+    usa_path, jp_path = args[0], args[1]
+    out_path = args[2] if len(args) > 2 else 'FMA2_Undub.iso'
 
     for path, label in [(usa_path, 'USA ISO'), (jp_path, 'JP ISO')]:
         if not os.path.exists(path):
@@ -327,13 +359,21 @@ def main():
 
     if not skip_verify:
         if not verify_md5(usa_path, 'USA', EXPECTED_MD5['usa']):
-            print("Use --skip-verify to bypass hash check")
             sys.exit(1)
         if not verify_md5(jp_path, 'JP', EXPECTED_MD5['jp']):
-            print("Use --skip-verify to bypass hash check")
             sys.exit(1)
 
-    do_undub(usa_path, jp_path, out_path)
+    if mode == 'full':
+        do_full(usa_path, jp_path, out_path)
+    elif mode == 'audio':
+        do_audio(usa_path, jp_path, out_path)
+    else:
+        print(f"Unknown mode: {mode}. Use: full, audio, or xdelta")
+        sys.exit(1)
+
+    final = os.path.getsize(out_path)
+    print(f"\nDone! {out_path} ({final:,} bytes / {final/1024/1024:.0f} MB)")
+    print("Load in PCSX2 — use memory card saves, not save states.")
 
     if want_xdelta:
         generate_xdelta(usa_path, out_path)
