@@ -51,6 +51,8 @@ python3 patch.py full "path/to/usa.iso" "path/to/jp.iso" "FMA2_Undub.iso"
 - macOS: `brew install libass libx264 pkgconf`
 - Linux: `apt install libass-dev libx264-dev pkg-config build-essential`
 
+**Fonts**: Subtitles use Helvetica (included on macOS). On Linux/Windows, install Helvetica or a compatible alternative (e.g. Liberation Sans, Nimbus Sans).
+
 **Optional flags:**
 - `--generate-xdelta` — Also create an xdelta patch file
 - `--skip-verify` — Skip ISO hash verification
