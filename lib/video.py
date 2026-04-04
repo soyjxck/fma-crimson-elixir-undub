@@ -1,6 +1,7 @@
 """Video encoding and DSI muxing for subtitled cutscenes."""
 
 import os
+import shutil
 import subprocess
 import tempfile
 
@@ -69,8 +70,6 @@ def dump_mkv(ffmpeg_bin, m2v_path, adpcm_bytes, mkv_path):
         adpcm_bytes: Raw JP ADPCM audio bytes.
         mkv_path: Output MKV path.
     """
-    import shutil
-
     with tempfile.TemporaryDirectory() as tmp:
         adpcm_path = os.path.join(tmp, 'audio.adpcm')
         txth_path = adpcm_path + '.txth'

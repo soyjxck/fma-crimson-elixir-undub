@@ -54,6 +54,7 @@ python3 patch.py full "path/to/usa.iso" "path/to/jp.iso" "FMA2_Undub.iso"
 **Optional flags:**
 - `--generate-xdelta` — Also create an xdelta patch file
 - `--skip-verify` — Skip ISO hash verification
+- `--dump-mkv <dir>` — Export subtitled cutscenes as MKV files to `<dir>`
 
 ### Option 3: Audio-only (no subtitles)
 
@@ -100,6 +101,7 @@ Subtitles use **Helvetica** and **Geometric Slabserif 703** (opening title card)
 ## Credits
 
 - **soyjxck** — Reverse engineering, patch development
+- **GXZ95** — Updated translation subtitles
 - **Claude** (Anthropic) — Full executable decompilation, audio pipeline analysis, patch development
 
 ## Related Projects

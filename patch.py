@@ -25,6 +25,7 @@ import os
 import sys
 import shutil
 import subprocess
+import tempfile
 
 from racjin import compress, decompress
 
@@ -265,7 +266,6 @@ def do_full(usa_iso_path, jp_iso_path, out_iso_path, dump_mkv_dir=None):
 
         # Export MKV if requested
         if dump_mkv_dir and sub_dsi is not None:
-            import tempfile
             from dsi_muxer import DSI as _DSI
             _src = _DSI.from_bytes(jp_dsi_bytes)
             _audio = _src.extract_audio()
@@ -310,11 +310,17 @@ def do_full(usa_iso_path, jp_iso_path, out_iso_path, dump_mkv_dir=None):
 # xdelta
 # =============================================================================
 
-def do_xdelta(args):
-    xdelta_bin = shutil.which('xdelta3') or shutil.which('xdelta')
+def _find_xdelta():
+    """Find xdelta3 binary."""
+    xdelta = shutil.which('xdelta3') or shutil.which('xdelta')
     for p in ['/opt/homebrew/bin/xdelta3', '/usr/local/bin/xdelta3']:
-        if not xdelta_bin and os.path.exists(p):
-            xdelta_bin = p
+        if not xdelta and os.path.exists(p):
+            xdelta = p
+    return xdelta
+
+
+def do_xdelta(args):
+    xdelta_bin = _find_xdelta()
     if not xdelta_bin:
         print("ERROR: xdelta3 not found. Install: brew install xdelta")
         sys.exit(1)
@@ -326,10 +332,7 @@ def do_xdelta(args):
 
 
 def generate_xdelta(usa_iso_path, out_iso_path):
-    xdelta_bin = shutil.which('xdelta3') or shutil.which('xdelta')
-    for p in ['/opt/homebrew/bin/xdelta3', '/usr/local/bin/xdelta3']:
-        if not xdelta_bin and os.path.exists(p):
-            xdelta_bin = p
+    xdelta_bin = _find_xdelta()
     if not xdelta_bin:
         print("WARNING: xdelta3 not found")
         return
@@ -351,13 +354,22 @@ def main():
         sys.exit(1)
 
     mode = sys.argv[1]
-    args = [a for a in sys.argv[2:] if not a.startswith('--')]
     skip_verify = '--skip-verify' in sys.argv
     want_xdelta = '--generate-xdelta' in sys.argv
     dump_mkv_dir = None
-    for i, a in enumerate(sys.argv):
+
+    # Parse --dump-mkv and collect positional args (excluding flag values)
+    skip_next = False
+    args = []
+    for i, a in enumerate(sys.argv[2:], start=2):
+        if skip_next:
+            skip_next = False
+            continue
         if a == '--dump-mkv' and i + 1 < len(sys.argv):
             dump_mkv_dir = sys.argv[i + 1]
+            skip_next = True
+        elif not a.startswith('--'):
+            args.append(a)
 
     print("Fullmetal Alchemist 2: Curse of the Crimson Elixir — Undub Patcher")
     print("=" * 60)
