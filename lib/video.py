@@ -7,33 +7,14 @@ import tempfile
 from dsi_muxer import DSI
 
 
-def _find_fontsdir():
-    """Find a directory containing custom fonts for subtitle rendering."""
-    candidates = [
-        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'fonts'),
-        os.path.expanduser('~/Library/Fonts'),
-        '/Library/Fonts',
-        '/usr/share/fonts',
-    ]
-    for d in candidates:
-        if os.path.isdir(d):
-            return d
-    return None
-
-
 def encode_subtitled_video(ffmpeg_bin, m2v_path, ass_path, output_path):
     """Encode video with burned ASS subtitles as PS2-compatible MPEG-2.
 
     Uses CBR encoding with parameters matching the original TMPGEnc output.
     FMA2 video: 512x448, 29.97fps, NTSC.
     """
-    fontsdir = _find_fontsdir()
-    ass_filter = f'ass={ass_path}'
-    if fontsdir:
-        ass_filter += f':fontsdir={fontsdir}'
-
     r = subprocess.run([ffmpeg_bin, '-y', '-i', m2v_path,
-        '-vf', f'{ass_filter},format=yuv420p',
+        '-vf', f'ass={ass_path},format=yuv420p',
         '-c:v', 'mpeg2video',
         '-b:v', '7000k', '-minrate', '7000k', '-maxrate', '7000k',
         '-bufsize', '1835008', '-qmin', '1', '-qmax', '12',
