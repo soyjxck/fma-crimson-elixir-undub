@@ -14,7 +14,7 @@ def encode_subtitled_video(ffmpeg_bin, m2v_path, ass_path, output_path):
     Uses CBR encoding with parameters matching the original TMPGEnc output.
     FMA2 video: 512x448, 29.97fps, NTSC.
     """
-    r = subprocess.run([ffmpeg_bin, '-y', '-i', m2v_path,
+    subprocess.run([ffmpeg_bin, '-y', '-i', m2v_path,
         '-vf', f'ass={ass_path},format=yuv420p',
         '-c:v', 'mpeg2video',
         '-b:v', '7000k', '-minrate', '7000k', '-maxrate', '7000k',
@@ -27,7 +27,23 @@ def encode_subtitled_video(ffmpeg_bin, m2v_path, ass_path, output_path):
         '-color_primaries', '5', '-color_trc', '5', '-colorspace', '4',
         '-video_format', 'ntsc',
         '-an', output_path], capture_output=True, timeout=600)
-    return os.path.exists(output_path) and os.path.getsize(output_path) > 0
+
+    if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+        return False
+
+    # Ensure end-of-sequence marker exists
+    with open(output_path, 'rb') as f:
+        vid = bytearray(f.read())
+    if vid.rfind(b'\x00\x00\x01\xb7') < 0:
+        last = len(vid)
+        while last > 0 and vid[last - 1] == 0:
+            last -= 1
+        vid = vid[:last]
+        vid.extend(b'\x00\x00\x01\xb7')
+        with open(output_path, 'wb') as f:
+            f.write(vid)
+
+    return True
 
 
 def build_subtitled_dsi(ffmpeg_bin, jp_dsi_bytes, ass_path):
@@ -61,13 +77,13 @@ def build_subtitled_dsi(ffmpeg_bin, jp_dsi_bytes, ass_path):
     return new_dsi.to_bytes()
 
 
-def dump_mkv(ffmpeg_bin, m2v_path, adpcm_bytes, mkv_path):
+def dump_mkv(ffmpeg_bin, m2v_path, jp_audio, mkv_path):
     """Export a subtitled cutscene as MKV with JP audio.
 
     Args:
         ffmpeg_bin: Path to ffmpeg binary.
         m2v_path: Encoded .m2v video with burned subtitles.
-        adpcm_bytes: Raw JP ADPCM audio bytes.
+        jp_audio: Raw JP ADPCM audio bytes.
         mkv_path: Output MKV path.
     """
     with tempfile.TemporaryDirectory() as tmp:
@@ -76,7 +92,7 @@ def dump_mkv(ffmpeg_bin, m2v_path, adpcm_bytes, mkv_path):
         wav_path = os.path.join(tmp, 'audio.wav')
 
         with open(adpcm_path, 'wb') as f:
-            f.write(adpcm_bytes)
+            f.write(jp_audio)
         with open(txth_path, 'w') as f:
             f.write('codec = PSX\nchannels = 2\nsample_rate = 48000\n'
                     'interleave = 0x100\nnum_samples = data_size\n')

@@ -30,12 +30,13 @@ import tempfile
 from racjin import compress, decompress
 
 from lib.constants import (
-    SECTOR, DSI_NAMES, SCEI_BANK_INDICES, EXPECTED_MD5,
+    SECTOR, DSI_NAMES, SCEI_BANK_INDICES, EXPECTED_HASHES,
     CFC_TRACK_TABLE_DIR_OFFSET, SUBS_DIR,
 )
-from lib.iso import find_file_entry, update_dir_entry, verify_md5
+from lib.iso import find_file_in_iso, update_dir_entry, verify_iso
 from lib.ffmpeg import find_or_build_ffmpeg
 from lib.video import build_subtitled_dsi, dump_mkv
+from dsi_muxer import DSI
 
 
 # =============================================================================
@@ -56,11 +57,11 @@ def do_audio(usa_iso_path, jp_iso_path, out_iso_path):
     with open(out_iso_path, 'rb') as f:
         iso_header = f.read(10 * 1024 * 1024)
 
-    usa_cfc_info = find_file_entry(iso_header, b'CFC.DIG;1')
-    usa_cfc_sector = usa_cfc_info[1]
+    usa_cfc_info = find_file_in_iso(iso_header, b'CFC.DIG;1')
+    usa_cfc_sector = usa_cfc_info[0]
 
-    jp_cfc_info = find_file_entry(jp_data[:10 * 1024 * 1024], b'CFC.DIG;1')
-    jp_cfc_sector = jp_cfc_info[1]
+    jp_cfc_info = find_file_in_iso(jp_data[:10 * 1024 * 1024], b'CFC.DIG;1')
+    jp_cfc_sector = jp_cfc_info[0]
 
     # --- Step 1: Patch XA track offset table ---
     print(f"\n{'='*60}")
@@ -114,7 +115,7 @@ def do_audio(usa_iso_path, jp_iso_path, out_iso_path):
     # DSI cutscenes (full JP, no truncation)
     for name in DSI_NAMES:
         needle = f'{name}.DSI;1'.encode()
-        usa_info = find_file_entry(iso_header, needle)
+        usa_info = find_file_in_iso(iso_header, needle)
         jp_pos = jp_data.find(needle)
         if not usa_info or jp_pos < 0:
             continue
@@ -128,33 +129,33 @@ def do_audio(usa_iso_path, jp_iso_path, out_iso_path):
             pad = (SECTOR - (jp_sz % SECTOR)) % SECTOR
             if pad:
                 f.write(b'\x00' * pad)
-            update_dir_entry(f, usa_info[0], write_sector, jp_sz)
+            update_dir_entry(f, usa_info[2], write_sector, jp_sz)
 
         file_sectors = (jp_sz + SECTOR - 1) // SECTOR
         print(f"  {name}: {jp_sz/1024/1024:.1f} MB")
         write_sector += file_sectors
 
     # DATA0
-    data0_info = find_file_entry(iso_header, b'DATA0')
+    data0_info = find_file_in_iso(iso_header, b'DATA0')
     if data0_info:
         with open(out_iso_path, 'rb') as f:
-            f.seek(data0_info[1] * SECTOR)
-            data0_content = f.read(data0_info[2])
+            f.seek(data0_info[0] * SECTOR)
+            data0_content = f.read(data0_info[1])
         with open(out_iso_path, 'r+b') as f:
             f.seek(write_sector * SECTOR)
             f.write(data0_content)
-            update_dir_entry(f, data0_info[0], write_sector, data0_info[2])
-        write_sector += (data0_info[2] + SECTOR - 1) // SECTOR
+            update_dir_entry(f, data0_info[2], write_sector, data0_info[1])
+        write_sector += (data0_info[1] + SECTOR - 1) // SECTOR
 
     # Full JP XA.PAK
-    jp_xa_info = find_file_entry(jp_data[:10*1024*1024], b'XA.PAK;1')
-    usa_xa_info = find_file_entry(iso_header, b'XA.PAK;1')
-    jp_xa_sz = jp_xa_info[2]
+    jp_xa_info = find_file_in_iso(jp_data[:10*1024*1024], b'XA.PAK;1')
+    usa_xa_info = find_file_in_iso(iso_header, b'XA.PAK;1')
+    jp_xa_sz = jp_xa_info[1]
 
     with open(out_iso_path, 'r+b') as f:
         f.seek(write_sector * SECTOR)
         remaining = jp_xa_sz
-        src = jp_xa_info[1] * SECTOR
+        src = jp_xa_info[0] * SECTOR
         while remaining > 0:
             chunk = min(remaining, 64 * 1024 * 1024)
             f.write(jp_data[src:src+chunk])
@@ -163,7 +164,7 @@ def do_audio(usa_iso_path, jp_iso_path, out_iso_path):
         pad = (SECTOR - (jp_xa_sz % SECTOR)) % SECTOR
         if pad:
             f.write(b'\x00' * pad)
-        update_dir_entry(f, usa_xa_info[0], write_sector, jp_xa_sz)
+        update_dir_entry(f, usa_xa_info[2], write_sector, jp_xa_sz)
 
     xa_end = write_sector + (jp_xa_sz + SECTOR - 1) // SECTOR
     print(f"  XA.PAK: {jp_xa_sz/1024/1024:.0f} MB")
@@ -217,7 +218,7 @@ def do_audio(usa_iso_path, jp_iso_path, out_iso_path):
     # Update CFC.DIG size
     cfc_new_size = (last_cfc_sector - usa_cfc_sector) * SECTOR
     with open(out_iso_path, 'r+b') as f:
-        update_dir_entry(f, usa_cfc_info[0], usa_cfc_sector, cfc_new_size)
+        update_dir_entry(f, usa_cfc_info[2], usa_cfc_sector, cfc_new_size)
 
     print(f"\n  Output: {out_iso_path} ({os.path.getsize(out_iso_path)/1024/1024:.0f} MB)")
     return jp_data, jp_cfc_sector
@@ -251,11 +252,11 @@ def do_full(usa_iso_path, jp_iso_path, out_iso_path, dump_mkv_dir=None):
                 continue
 
         # Find current DSI location in our patched ISO
-        usa_info = find_file_entry(iso_header, f'{name}.DSI;1'.encode())
+        usa_info = find_file_in_iso(iso_header, f'{name}.DSI;1'.encode())
         if not usa_info:
             continue
-        cur_sector = usa_info[1]
-        cur_size = usa_info[2]
+        cur_sector = usa_info[0]
+        cur_size = usa_info[1]
 
         # Build subtitled DSI from the JP DSI currently in our ISO
         with open(out_iso_path, 'rb') as f:
@@ -266,17 +267,16 @@ def do_full(usa_iso_path, jp_iso_path, out_iso_path, dump_mkv_dir=None):
 
         # Export MKV if requested
         if dump_mkv_dir and sub_dsi is not None:
-            from dsi_muxer import DSI as _DSI
-            _src = _DSI.from_bytes(jp_dsi_bytes)
-            _audio = _src.extract_audio()
-            _sub = _DSI.from_bytes(sub_dsi)
-            _video_bytes = _sub.extract_video()
-            with tempfile.NamedTemporaryFile(suffix='.m2v', delete=False) as _mf:
-                _mf.write(_video_bytes)
-                _m2v_path = _mf.name
+            src = DSI.from_bytes(jp_dsi_bytes)
+            audio = src.extract_audio()
+            sub = DSI.from_bytes(sub_dsi)
+            video_bytes = sub.extract_video()
+            with tempfile.NamedTemporaryFile(suffix='.m2v', delete=False) as mf:
+                mf.write(video_bytes)
+                m2v_path = mf.name
             mkv_path = os.path.join(dump_mkv_dir, f'{name}.mkv')
-            dump_mkv(ffmpeg_bin, _m2v_path, _audio, mkv_path)
-            os.unlink(_m2v_path)
+            dump_mkv(ffmpeg_bin, m2v_path, audio, mkv_path)
+            os.unlink(m2v_path)
             if os.path.exists(mkv_path):
                 print(f"    -> {mkv_path}")
 
@@ -290,7 +290,7 @@ def do_full(usa_iso_path, jp_iso_path, out_iso_path, dump_mkv_dir=None):
                 f.seek(cur_sector * SECTOR)
                 f.write(sub_dsi)
                 f.write(b'\x00' * (cur_size - len(sub_dsi)))
-                update_dir_entry(f, usa_info[0], cur_sector, len(sub_dsi))
+                update_dir_entry(f, usa_info[2], cur_sector, len(sub_dsi))
             print(f"  {name}: subtitled ({len(sub_dsi)/1024/1024:.1f} MB)")
         else:
             # Append at end
@@ -302,7 +302,7 @@ def do_full(usa_iso_path, jp_iso_path, out_iso_path, dump_mkv_dir=None):
                 pad = (SECTOR - (len(sub_dsi) % SECTOR)) % SECTOR
                 if pad:
                     f.write(b'\x00' * pad)
-                update_dir_entry(f, usa_info[0], new_sector, len(sub_dsi))
+                update_dir_entry(f, usa_info[2], new_sector, len(sub_dsi))
             print(f"  {name}: subtitled, relocated ({len(sub_dsi)/1024/1024:.1f} MB)")
 
 
@@ -391,9 +391,9 @@ def main():
             sys.exit(1)
 
     if not skip_verify:
-        if not verify_md5(usa_path, 'USA', EXPECTED_MD5['usa']):
+        if not verify_iso(usa_path, 'USA', EXPECTED_HASHES['usa']):
             sys.exit(1)
-        if not verify_md5(jp_path, 'JP', EXPECTED_MD5['jp']):
+        if not verify_iso(jp_path, 'JP', EXPECTED_HASHES['jp']):
             sys.exit(1)
 
     if mode == 'full':

@@ -16,9 +16,9 @@ SCEI_BANK_INDICES = [7, 15, 34, 37, 49, 65, 293, 295, 297, 299,
 DSI_NAMES = ['MV00', 'MV01', 'MV02', 'MV03', 'MV04', 'MV05',
              'MV06', 'MV07', 'MV08', 'MV09', 'MV10', 'MV11']
 
-EXPECTED_MD5 = {
-    "usa": "2e79a69434561557dd0eaa9061d62eed",
-    "jp":  "6804b82a9eb8d6a1e2d85a25683ec89d",
+EXPECTED_HASHES = {
+    'usa': {'size': 2341961728, 'md5': '2e79a69434561557dd0eaa9061d62eed'},
+    'jp':  {'size': 2437742592, 'md5': '6804b82a9eb8d6a1e2d85a25683ec89d'},
 }
 
 SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
