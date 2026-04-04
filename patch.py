@@ -17,6 +17,7 @@ Three ways to create the undubbed ISO:
 Options:
     --generate-xdelta   Also create an xdelta patch file after patching
     --skip-verify       Skip MD5 hash verification
+    --dump-mkv <dir>    Export subtitled cutscenes as MKV files to <dir>
 """
 
 import struct
@@ -33,7 +34,7 @@ from lib.constants import (
 )
 from lib.iso import find_file_entry, update_dir_entry, verify_md5
 from lib.ffmpeg import find_or_build_ffmpeg
-from lib.video import build_subtitled_dsi
+from lib.video import build_subtitled_dsi, dump_mkv
 
 
 # =============================================================================
@@ -221,9 +222,12 @@ def do_audio(usa_iso_path, jp_iso_path, out_iso_path):
     return jp_data, jp_cfc_sector
 
 
-def do_full(usa_iso_path, jp_iso_path, out_iso_path):
+def do_full(usa_iso_path, jp_iso_path, out_iso_path, dump_mkv_dir=None):
     """Full pipeline: audio-only patching + burned English subtitles on cutscenes."""
     jp_data, jp_cfc_sector = do_audio(usa_iso_path, jp_iso_path, out_iso_path)
+
+    if dump_mkv_dir:
+        os.makedirs(dump_mkv_dir, exist_ok=True)
 
     print(f"\n{'='*60}")
     print("Step 4: Burn subtitles onto cutscenes")
@@ -261,6 +265,24 @@ def do_full(usa_iso_path, jp_iso_path, out_iso_path):
                 tmp.write(f.read(cur_size))
 
         sub_dsi = build_subtitled_dsi(ffmpeg_bin, tmp_dsi, ass_path)
+
+        # Export MKV if requested (before cleaning up temp DSI)
+        if dump_mkv_dir and sub_dsi is not None:
+            from dsi_muxer import DSI as _DSI
+            _src = _DSI.from_file(tmp_dsi)
+            _audio = _src.extract_audio()
+            # Find the encoded m2v from the subtitled DSI
+            _sub = _DSI.from_bytes(sub_dsi)
+            _video_bytes = _sub.extract_video()
+            with tempfile.NamedTemporaryFile(suffix='.m2v', delete=False) as _mf:
+                _mf.write(_video_bytes)
+                _m2v_path = _mf.name
+            mkv_path = os.path.join(dump_mkv_dir, f'{name}.mkv')
+            dump_mkv(ffmpeg_bin, _m2v_path, _audio, mkv_path)
+            os.unlink(_m2v_path)
+            if os.path.exists(mkv_path):
+                print(f"    -> {mkv_path}")
+
         os.unlink(tmp_dsi)
 
         if sub_dsi is None:
@@ -337,6 +359,10 @@ def main():
     args = [a for a in sys.argv[2:] if not a.startswith('--')]
     skip_verify = '--skip-verify' in sys.argv
     want_xdelta = '--generate-xdelta' in sys.argv
+    dump_mkv_dir = None
+    for i, a in enumerate(sys.argv):
+        if a == '--dump-mkv' and i + 1 < len(sys.argv):
+            dump_mkv_dir = sys.argv[i + 1]
 
     print("Fullmetal Alchemist 2: Curse of the Crimson Elixir — Undub Patcher")
     print("=" * 60)
@@ -364,7 +390,7 @@ def main():
             sys.exit(1)
 
     if mode == 'full':
-        do_full(usa_path, jp_path, out_path)
+        do_full(usa_path, jp_path, out_path, dump_mkv_dir=dump_mkv_dir)
     elif mode == 'audio':
         do_audio(usa_path, jp_path, out_path)
     else:
