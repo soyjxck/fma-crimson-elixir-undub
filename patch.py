@@ -257,21 +257,18 @@ def do_full(usa_iso_path, jp_iso_path, out_iso_path, dump_mkv_dir=None):
         cur_size = usa_info[2]
 
         # Build subtitled DSI from the JP DSI currently in our ISO
-        import tempfile
-        with tempfile.NamedTemporaryFile(suffix='.dsi', delete=False) as tmp:
-            tmp_dsi = tmp.name
-            with open(out_iso_path, 'rb') as f:
-                f.seek(cur_sector * SECTOR)
-                tmp.write(f.read(cur_size))
+        with open(out_iso_path, 'rb') as f:
+            f.seek(cur_sector * SECTOR)
+            jp_dsi_bytes = f.read(cur_size)
 
-        sub_dsi = build_subtitled_dsi(ffmpeg_bin, tmp_dsi, ass_path)
+        sub_dsi = build_subtitled_dsi(ffmpeg_bin, jp_dsi_bytes, ass_path)
 
-        # Export MKV if requested (before cleaning up temp DSI)
+        # Export MKV if requested
         if dump_mkv_dir and sub_dsi is not None:
+            import tempfile
             from dsi_muxer import DSI as _DSI
-            _src = _DSI.from_file(tmp_dsi)
+            _src = _DSI.from_bytes(jp_dsi_bytes)
             _audio = _src.extract_audio()
-            # Find the encoded m2v from the subtitled DSI
             _sub = _DSI.from_bytes(sub_dsi)
             _video_bytes = _sub.extract_video()
             with tempfile.NamedTemporaryFile(suffix='.m2v', delete=False) as _mf:
@@ -282,8 +279,6 @@ def do_full(usa_iso_path, jp_iso_path, out_iso_path, dump_mkv_dir=None):
             os.unlink(_m2v_path)
             if os.path.exists(mkv_path):
                 print(f"    -> {mkv_path}")
-
-        os.unlink(tmp_dsi)
 
         if sub_dsi is None:
             print(f"  {name}: subtitle burn failed, keeping audio-only")

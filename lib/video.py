@@ -48,8 +48,8 @@ def encode_subtitled_video(ffmpeg_bin, m2v_path, ass_path, output_path):
     return os.path.exists(output_path) and os.path.getsize(output_path) > 0
 
 
-def build_subtitled_dsi(ffmpeg_bin, jp_dsi_path, ass_path):
-    """Build a subtitled DSI from a JP DSI file and ASS subtitle file.
+def build_subtitled_dsi(ffmpeg_bin, jp_dsi_bytes, ass_path):
+    """Build a subtitled DSI from JP DSI bytes and an ASS subtitle file.
 
     Pipeline:
         1. Demux JP DSI -> video + audio
@@ -58,7 +58,7 @@ def build_subtitled_dsi(ffmpeg_bin, jp_dsi_path, ass_path):
 
     Returns DSI bytes, or None on failure.
     """
-    dsi = DSI.from_file(jp_dsi_path)
+    dsi = DSI.from_bytes(jp_dsi_bytes)
     video = dsi.extract_video()
     audio = dsi.extract_audio()
 
