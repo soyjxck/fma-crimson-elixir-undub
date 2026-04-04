@@ -1,21 +1,67 @@
-"""Video encoding and DSI muxing for subtitled cutscenes."""
+"""
+Video encoding and DSI muxing for subtitled cutscenes.
+
+This module handles:
+1. MPEG-2 encoding with burned ASS subtitles
+2. DSI muxing via dsi-muxer
+3. MKV export with JP audio
+"""
 
 import os
+import re
 import shutil
 import subprocess
 import tempfile
 
 from dsi_muxer import DSI
 
+_FONT_DIRS = [
+    os.path.expanduser('~/Library/Fonts'),
+    '/Library/Fonts',
+    '/System/Library/Fonts',
+    '/System/Library/Fonts/Supplemental',
+    '/usr/share/fonts',
+    '/usr/local/share/fonts',
+]
+
+
+def _find_fontsdir():
+    """Find a directory containing fonts for subtitle rendering."""
+    for d in _FONT_DIRS:
+        if os.path.isdir(d):
+            return d
+    return None
+
+
+# =============================================================================
+# MPEG-2 Encoding
+# =============================================================================
 
 def encode_subtitled_video(ffmpeg_bin, m2v_path, ass_path, output_path):
     """Encode video with burned ASS subtitles as PS2-compatible MPEG-2.
 
-    Uses CBR encoding with parameters matching the original TMPGEnc output.
-    FMA2 video: 512x448, 29.97fps, NTSC.
+    Uses high-quality CBR encoding at 7000k — no size constraint since
+    DSI block count is auto-calculated from content size.
+
+    Args:
+        ffmpeg_bin: Path to ffmpeg binary.
+        m2v_path: Input MPEG-2 video.
+        ass_path: ASS subtitle file to burn.
+        output_path: Where to write the encoded .m2v.
+
+    Returns:
+        True on success, False on failure.
+
+    Raises:
+        RuntimeError: If libass reports missing fonts.
     """
-    subprocess.run([ffmpeg_bin, '-y', '-i', m2v_path,
-        '-vf', f'ass={ass_path},format=yuv420p',
+    ass_filter = f'ass={ass_path}'
+    fontsdir = _find_fontsdir()
+    if fontsdir:
+        ass_filter += f':fontsdir={fontsdir}'
+
+    r = subprocess.run([ffmpeg_bin, '-y', '-i', m2v_path,
+        '-vf', f'{ass_filter},format=yuv420p',
         '-c:v', 'mpeg2video',
         '-b:v', '7000k', '-minrate', '7000k', '-maxrate', '7000k',
         '-bufsize', '1835008', '-qmin', '1', '-qmax', '12',
@@ -26,7 +72,16 @@ def encode_subtitled_video(ffmpeg_bin, m2v_path, ass_path, output_path):
         '-i_qfactor', '0.4', '-b_qfactor', '4.0',
         '-color_primaries', '5', '-color_trc', '5', '-colorspace', '4',
         '-video_format', 'ntsc',
-        '-an', output_path], capture_output=True, timeout=600)
+        '-an', output_path], capture_output=True, text=True, timeout=600)
+
+    # Check for missing font warnings from libass
+    if r.stderr and 'fontselect' in r.stderr.lower() and 'failed' in r.stderr.lower():
+        fonts = re.findall(r"Glyph.*?font '([^']+)'", r.stderr)
+        if not fonts:
+            fonts = re.findall(r"(?:fontselect|SelectFont).*?'([^']+)'", r.stderr)
+        raise RuntimeError(
+            f"Missing fonts for subtitle rendering: {', '.join(set(fonts)) or 'unknown'}\n"
+            f"  Install them to ~/Library/Fonts (macOS) or /usr/share/fonts (Linux)")
 
     if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
         return False
