@@ -404,9 +404,16 @@ def main():
         print(f"Unknown mode: {mode}. Use: full, audio, or xdelta")
         sys.exit(1)
 
+    # Update PVD volume size — required for real PS2 hardware
     final = os.path.getsize(out_path)
+    final_sectors = (final + SECTOR - 1) // SECTOR
+    with open(out_path, 'r+b') as f:
+        f.seek(16 * SECTOR + 80)
+        f.write(struct.pack('<I', final_sectors))
+        f.write(struct.pack('>I', final_sectors))
+
     print(f"\nDone! {out_path} ({final:,} bytes / {final/1024/1024:.0f} MB)")
-    print("Load in PCSX2 — use memory card saves, not save states.")
+    print("Load in PCSX2 or burn to disc for real PS2 hardware.")
 
     if want_xdelta:
         generate_xdelta(usa_path, out_path)
