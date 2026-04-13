@@ -43,7 +43,7 @@ from dsi_muxer import DSI
 # Core patching
 # =============================================================================
 
-def do_audio(usa_iso_path, jp_iso_path, out_iso_path):
+def do_audio(usa_iso_path, jp_iso_path, out_iso_path, dump_mkv_dir=None):
     """Audio-only undub: JP XA.PAK + JP DSI + JP combat banks, no subtitles."""
     print("Reading JP ISO...")
     with open(jp_iso_path, 'rb') as f:
