@@ -92,7 +92,7 @@ In `full` mode, English subtitles are burned onto the JP video using ffmpeg + li
 ## Known Limitations
 
 - Cutscene video re-encoded at ~7Mbps CBR (original varies, some scenes may have slightly lower quality)
-- Subtitles for MV07-MV11 are still being translated and retimed
+- Cutscene video re-encoded at ~7Mbps CBR (original varies, some scenes may have slightly lower quality)
 
 ## Fonts
 

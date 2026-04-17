@@ -26,7 +26,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:13.84,0:00:16.95,Helvetica,,0,0,0,,What's with these guys?
 Dialogue: 0,0:00:16.95,0:00:20.05,Helvetica,,0,0,0,,Are they telling us not to go any farther?
 Dialogue: 0,0:00:20.05,0:00:22.62,Helvetica,,0,0,0,,It seems like they're all guarding the ruins.
-Dialogue: 0,0:00:22.62,0:00:27.09,Helvetica,,0,0,0,,{\fs28.5}They might think we’re grave robbers or something.
+Dialogue: 0,0:00:22.62,0:00:28.59,Helvetica,,0,0,0,,{\fs28.5}They might think we’re grave robbers or something.
 Dialogue: 0,0:00:28.59,0:00:34.36,Helvetica,,0,0,2,,{\fs22}Look, we're not like that.\NPlease just let us through.
 Dialogue: 0,0:00:37.83,0:00:41.20,Helvetica,,0,0,0,,Like I said, we're not grave robbers.
 Dialogue: 0,0:00:44.31,0:00:45.41,Helvetica,,0,0,0,,Hey...!
@@ -38,11 +38,10 @@ Dialogue: 0,0:00:55.82,0:01:00.46,Helvetica,,0,0,0,,Yeah, this feels like the sa
 Dialogue: 0,0:01:10.77,0:01:11.77,Helvetica,,0,0,0,,Golems?
 Dialogue: 0,0:01:11.77,0:01:13.84,Helvetica,,0,0,0,,Damn it! What is this?
 Dialogue: 0,0:01:13.84,0:01:16.14,Helvetica,,0,0,0,,Let's pull back for now!
-Dialogue: 0,0:01:20.14,0:01:22.98,Helvetica,,0,0,0,,Why are there golems inside the town?!
+Dialogue: 0,0:01:20.14,0:01:22.98,Helvetica,,0,0,0,,Why are there golems inside the city?!
 Dialogue: 0,0:01:22.98,0:01:25.78,Helvetica,,0,0,0,,Don't ask me, I don't know!
 Dialogue: 0,0:01:29.32,0:01:34.66,Helvetica,,0,0,2,,{\fs22}Hey, this is serious! There are monsters called golems over there!\NYou all need to evacuate right now...
-Dialogue: 0,0:01:34.66,0:01:37.83,Helvetica,,0,0,2,,{\fs22}{\c&HFFFFFF&\t(0,1000,\c&H505050&)}\NHey, this is serious! There are monsters called golems over there!\NYou all need to evacuate right now...
-Dialogue: 0,0:01:37.83,0:01:38.69,Helvetica,,0,0,2,,{\fs22}{\c&H505050&}{\fad(0,860)}\NHey, this is serious! There are monsters called golems over there!\NYou all need to evacuate right now...
+Dialogue: 0,0:01:34.66,0:01:37.06,Helvetica,,0,0,2,,{\fs22}{\c&HFFFFFF&\t(0,1030,\c&HE7F8FF&}\NHey, this is serious! There are monsters called golems over there!\NYou all need to evacuate right now...
 Dialogue: 0,0:01:45.83,0:01:48.74,Helvetica,,0,0,0,,So, the Siam-Sid was a city of golems?!
-Dialogue: 0,0:01:48.74,0:01:53.94,Helvetica,,0,0,2,,{\fs22}This is a ruined city! I thought something was strange!\NSo that's what it was after all!
+Dialogue: 0,0:01:48.74,0:01:53.94,Helvetica,,0,0,2,,{\fs22}This is a ruined city! I knew something was strange!\NSo that's what it was after all!
 Dialogue: 0,0:01:53.94,0:01:58.68,Helvetica,,0,0,0,,{\fs24}If you knew that, you could've said so from the start, old man!
