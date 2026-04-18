@@ -15,7 +15,7 @@ Audio File: MV04.mkv
 Video File: MV04.mkv
 Video AR Mode: 4
 Video AR Value: 1.333333
-Video Position: 574
+Video Position: 696
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
@@ -28,7 +28,8 @@ Dialogue: 0,0:00:21.35,0:00:25.45,Helvetica,,0,0,0,,Yeah... I never thought it'd
 Dialogue: 0,0:00:25.45,0:00:28.32,Helvetica,,0,0,0,,{\fs29}It's worse than what was reported to headquarters.
 Dialogue: 0,0:00:28.32,0:00:31.16,Helvetica,,0,0,0,,{\fs25.5}First, we need to hurry and find Second Lieutenant Havoc.
 Dialogue: 0,0:00:31.16,0:00:35.53,Helvetica,,0,0,0,,{\fs25}What is it, Al? It's hard to walk if you stick that close to me.
-Dialogue: 0,0:00:35.53,0:00:40.77,Helvetica,,0,0,0,,{\fs27.5}I'm just... not good with this kind of eerie atmosphere.
+Dialogue: 0,0:00:35.53,0:00:41.54,Helvetica,,0,0,0,,{\fs27.5}I'm just... not good with this kind of eerie atmosphere.
+Dialogue: 0,0:00:39.77,0:00:40.77,Helvetica,,0,0,410,,Huh?
 Dialogue: 0,0:00:41.87,0:00:44.74,Helvetica,,0,0,0,,What's with that? You're such a coward, Al.
 Dialogue: 0,0:00:44.74,0:00:51.21,Helvetica,,0,0,2,,{\fs22}Look at the Lieutenant. Even though she's a woman,\Nshe doesn’t seem scared at all. She's like... whoa!
 Dialogue: 0,0:00:49.67,0:00:49.70,Helvetica,,0,0,2,,{\fs22\pos(254.18,445.5)}‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ whoa!
