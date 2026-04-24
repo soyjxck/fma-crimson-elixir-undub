@@ -40,7 +40,7 @@ def _find_fontsdir():
 def encode_subtitled_video(ffmpeg_bin, m2v_path, ass_path, output_path):
     """Encode video with burned ASS subtitles as PS2-compatible MPEG-2.
 
-    Uses high-quality CBR encoding at 7000k — no size constraint since
+    Uses high-quality CBR encoding at 7500k — no size constraint since
     DSI block count is auto-calculated from content size.
 
     Args:
@@ -63,7 +63,7 @@ def encode_subtitled_video(ffmpeg_bin, m2v_path, ass_path, output_path):
     r = subprocess.run([ffmpeg_bin, '-y', '-i', m2v_path,
         '-vf', f'{ass_filter},format=yuv420p',
         '-c:v', 'mpeg2video',
-        '-b:v', '7000k', '-minrate', '7000k', '-maxrate', '7000k',
+        '-b:v', '7500k', '-minrate', '7500k', '-maxrate', '7500k',
         '-bufsize', '1835008', '-qmin', '1', '-qmax', '12',
         '-s', '512x448', '-sar', '7:6', '-r', '30000/1001',
         '-g', '16', '-bf', '2', '-b_strategy', '0',
@@ -86,7 +86,8 @@ def encode_subtitled_video(ffmpeg_bin, m2v_path, ass_path, output_path):
     if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
         return False
 
-    # Ensure end-of-sequence marker exists
+    # Ensure end-of-sequence marker exists (trailing stuffing is added
+    # by the muxer's ensure_end_of_sequence).
     with open(output_path, 'rb') as f:
         vid = bytearray(f.read())
     if vid.rfind(b'\x00\x00\x01\xb7') < 0:

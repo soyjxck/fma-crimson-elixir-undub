@@ -1,2 +1,2 @@
 racjin
-dsi-muxer
+dsi-muxer>=1.4.0
