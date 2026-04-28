@@ -95,7 +95,7 @@ In `full` mode, English subtitles are burned onto the JP video using ffmpeg + li
 
 ## Fonts
 
-Subtitles use **Helvetica** and **Geometric Slabserif 703** (opening title card). These fonts are not bundled — subtitle rendering requires them to be installed on the build machine. The xdelta release has subtitles pre-burned into the video, so fonts are only relevant when building from source.
+Subtitles use **Serifa Std** (dialogue) and **Geometric Slabserif 703** (opening title card). These fonts are not bundled — subtitle rendering requires them to be installed on the build machine. The xdelta release has subtitles pre-burned into the video, so fonts are only relevant when building from source.
 
 ## Credits
 
