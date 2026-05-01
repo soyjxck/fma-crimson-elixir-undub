@@ -9,15 +9,13 @@ YCbCr Matrix: TV.FCC
 PlayResX: 512
 PlayResY: 448
 
-[Aegisub Project by GXZ95]
-Last Style Storage: Default
+[Aegisub Project Garbage]
 Audio File: MV01.mkv
 Video File: MV01.mkv
 Video AR Mode: 4
 Video AR Value: 1.333333
-Scroll Position: 18
-Active Line: 23
-Video Position: 2802
+Active Line: 4
+Video Position: 2002
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
@@ -31,7 +29,7 @@ Dialogue: 0,0:00:33.53,0:00:37.33,Serifa Std,,0,0,0,,This stone is truly remarka
 Dialogue: 0,0:00:37.33,0:00:41.27,Serifa Std,,0,0,0,,It can even create things like this.
 Dialogue: 0,0:00:41.77,0:00:43.04,Serifa Std,,0,0,0,,A chimera...
 Dialogue: 0,0:00:43.04,0:00:47.74,Serifa Std,,0,0,0,,Now go! Bite and tear them apart!
-Dialogue: 0,0:01:05.19,0:01:10.17,Serifa Std,,0,0,0,,{\fs22.7}What are you doing!? Stop playing around and bite his arm right off!
+Dialogue: 0,0:01:05.19,0:01:10.17,Serifa Std,,0,0,0,,{\fs22.7}What are you doing?! Stop playing around and bite his arm right off!
 Dialogue: 0,0:01:13.47,0:01:17.67,Serifa Std,,0,0,0,,What's wrong, cat bastard? Savor the taste.
 Dialogue: 0,0:01:17.67,0:01:17.70,Serifa Std,,0,0,0,,{\pos(255.29,437.55)}What's wrong, cat bastard? Savor the taste.
 Dialogue: 0,0:01:17.70,0:01:17.73,Serifa Std,,0,0,0,,{\pos(255.53,438.2)}What's wrong, cat bastard? Savor the taste.
@@ -48,8 +46,8 @@ Dialogue: 0,0:01:18.03,0:01:18.06,Serifa Std,,0,0,0,,{\pos(256.34,438.46)}What's
 Dialogue: 0,0:01:18.06,0:01:18.10,Serifa Std,,0,0,0,,{\pos(256.14,437.28)}What's wrong, cat bastard? Savor the taste.
 Dialogue: 0,0:01:18.10,0:01:18.13,Serifa Std,,0,0,0,,{\pos(256.5,437.77)}What's wrong, cat bastard? Savor the taste.
 Dialogue: 0,0:01:18.13,0:01:18.16,Serifa Std,,0,0,0,,{\pos(255.8,438.38)}What's wrong, cat bastard? Savor the taste.
-Dialogue: 0,0:01:23.05,0:01:25.41,Serifa Std,,0,0,0,,Rose...
-Dialogue: 0,0:01:25.41,0:01:28.98,Serifa Std,,0,0,0,,Look closely.
+Dialogue: 0,0:01:23.05,0:01:24.75,Serifa Std,,0,0,0,,Rose.
+Dialogue: 0,0:01:25.41,0:01:28.98,Serifa Std,,0,0,0,,Look closely...
 Dialogue: 0,0:01:29.48,0:01:39.96,Serifa Std,,0,0,1,,{\fs22.5}This is the form of a sinner who committed human transmutation\Nand trespassed upon what they call God's domain.
 Dialogue: 0,0:01:39.96,0:01:47.60,Serifa Std,,0,0,0,,The Steel Knight... Automail... T-That's it.
 Dialogue: 0,0:01:48.50,0:01:53.61,Serifa Std,,0,0,0,,The Fullmetal Alchemist!

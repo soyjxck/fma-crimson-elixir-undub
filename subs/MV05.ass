@@ -9,16 +9,13 @@ YCbCr Matrix: TV.FCC
 PlayResX: 512
 PlayResY: 448
 
-[Aegisub Project by GXZ95]
-Last Style Storage: Default
+[Aegisub Project Garbage]
 Audio File: MV05.mkv
 Video File: MV05.mkv
 Video AR Mode: 4
 Video AR Value: 1.333333
-Video Zoom Percent: 1.000000
-Scroll Position: 24
-Active Line: 25
-Video Position: 3953
+Scroll Position: 15
+Video Position: 438
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
@@ -27,8 +24,8 @@ Style: Serifa Std,Serifa Std,30,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,-1,0
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-Dialogue: 0,0:00:09.24,0:00:11.11,Serifa Std,,0,0,0,,Brother, isn't he...
-Dialogue: 0,0:00:11.11,0:00:13.18,Serifa Std,,0,0,0,,The one from Resembool.
+Dialogue: 0,0:00:09.24,0:00:11.11,Serifa Std,,0,0,0,,Brother, isn't he...?
+Dialogue: 0,0:00:11.11,0:00:14.24,Serifa Std,,0,0,0,,The one from Resembool.
 Dialogue: 0,0:00:14.51,0:00:18.18,Serifa Std,,0,0,0,,Hey! Are you the one who wrecked this village?
 Dialogue: 0,0:00:18.18,0:00:21.95,Serifa Std,,0,0,0,,{\fs29}Were you planning to do the same to Resembool?
 Dialogue: 0,0:00:21.95,0:00:23.95,Serifa Std,,0,0,0,,What's your aim?

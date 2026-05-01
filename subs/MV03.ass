@@ -27,11 +27,11 @@ Style: Serifa Std,Serifa Std,30,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,-1,0
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-Dialogue: 0,0:00:14.98,0:00:18.35,Serifa Std,,0,0,0,,Who the hell are you?
+Dialogue: 0,0:00:14.98,0:00:18.35,Serifa Std,,0,0,0,,What exactly are you?
 Dialogue: 0,0:00:18.35,0:00:21.58,Serifa Std,,0,0,0,,Are you human? Or...?
 Dialogue: 0,0:00:22.85,0:00:24.59,Serifa Std,,0,0,0,,Who's there?!
-Dialogue: 0,0:00:32.63,0:00:37.13,Serifa Std,,0,0,0,,Poor thing... Covered in wounds all over your body.
-Dialogue: 0,0:00:37.97,0:00:40.87,Serifa Std,,0,0,0,,But it's alright now.
+Dialogue: 0,0:00:32.63,0:00:37.13,Serifa Std,,0,0,0,,Poor thing. Covered in wounds all over your body.
+Dialogue: 0,0:00:37.97,0:00:40.87,Serifa Std,,0,0,0,,But it's okay now.
 Dialogue: 0,0:01:12.77,0:01:14.00,Serifa Std,,0,0,0,,Brother...
 Dialogue: 0,0:01:14.00,0:01:16.17,Serifa Std,,0,0,0,,You bastard!
 Dialogue: 0,0:01:16.17,0:01:16.84,Serifa Std,,0,0,0,,{\1c&HFFFFFF&\t(0,600,\1c&H8B6F55&)}You bastard!
