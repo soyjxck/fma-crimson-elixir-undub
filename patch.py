@@ -237,8 +237,9 @@ def do_full(usa_iso_path, jp_iso_path, out_iso_path, dump_mkv_dir=None):
 
     ffmpeg_bin = find_or_build_ffmpeg()
     if not ffmpeg_bin:
-        print("  WARNING: ffmpeg with libass not available — skipping subtitles")
-        return
+        print("  ERROR: ffmpeg with libass not available — cannot burn subtitles.")
+        print("  Use `patch.py audio` if you only want audio undub without subtitles.")
+        sys.exit(1)
 
     with open(out_iso_path, 'rb') as f:
         iso_header = f.read(10 * 1024 * 1024)

@@ -26,6 +26,7 @@ def find_or_build_ffmpeg():
     """
     # Check common locations
     candidates = [
+        '/tmp/ffmpeg-build/ffmpeg-7.1.1/ffmpeg',
         '/tmp/ffmpeg-custom/ffmpeg',
         '/tmp/ffmpeg-7.1.1/ffmpeg',
         shutil.which('ffmpeg'),
@@ -63,9 +64,12 @@ def find_or_build_ffmpeg():
             print("    Fedora: sudo dnf install libass-devel x264-devel pkgconf-pkg-config gcc make")
             return None
 
-    # Download ffmpeg source
+    # Download ffmpeg source (re-extract if the tree is partial — /tmp cleanup
+    # on macOS removes some files after 3 days, leaving a stub directory)
     ffmpeg_dir = os.path.join(build_dir, 'ffmpeg-7.1.1')
-    if not os.path.exists(ffmpeg_dir):
+    if not os.path.exists(os.path.join(ffmpeg_dir, 'configure')):
+        if os.path.exists(ffmpeg_dir):
+            shutil.rmtree(ffmpeg_dir)
         print("  Downloading ffmpeg source...")
         subprocess.run(['curl', '-sL', 'https://ffmpeg.org/releases/ffmpeg-7.1.1.tar.xz',
                         '-o', os.path.join(build_dir, 'ffmpeg.tar.xz')], check=True)
@@ -98,17 +102,27 @@ def find_or_build_ffmpeg():
 
     env = os.environ.copy()
     env['PKG_CONFIG'] = pkg_config
-    subprocess.run(configure_args, cwd=ffmpeg_dir, capture_output=True, env=env)
+    r = subprocess.run(configure_args, cwd=ffmpeg_dir, capture_output=True,
+                       text=True, env=env)
+    if r.returncode != 0:
+        print("  ERROR: ffmpeg configure failed:")
+        print(r.stderr[-2000:] if r.stderr else '(no stderr)')
+        return None
 
     # Build
     print("  Compiling ffmpeg (this takes a few minutes)...")
     cpus = os.cpu_count() or 4
-    subprocess.run(['make', f'-j{cpus}'], cwd=ffmpeg_dir, capture_output=True)
+    r = subprocess.run(['make', f'-j{cpus}'], cwd=ffmpeg_dir,
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        print("  ERROR: ffmpeg compile failed:")
+        print(r.stderr[-2000:] if r.stderr else '(no stderr)')
+        return None
 
     ffmpeg_bin = os.path.join(ffmpeg_dir, 'ffmpeg')
     if os.path.exists(ffmpeg_bin):
         print(f"  Built: {ffmpeg_bin}")
         return ffmpeg_bin
 
-    print("  ERROR: ffmpeg build failed")
+    print("  ERROR: ffmpeg build produced no binary")
     return None
