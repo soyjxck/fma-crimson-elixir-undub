@@ -9,15 +9,14 @@ YCbCr Matrix: TV.FCC
 PlayResX: 512
 PlayResY: 448
 
-[Aegisub Project by GXZ95]
-Last Style Storage: Default
+[Aegisub Project Garbage]
 Audio File: MV11.mkv
 Video File: MV11.mkv
 Video AR Mode: 4
 Video AR Value: 1.333333
-Scroll Position: 15
-Active Line: 25
-Video Position: 3153
+Scroll Position: 17
+Active Line: 18
+Video Position: 2405
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
@@ -45,8 +44,8 @@ Dialogue: 0,0:00:55.53,0:01:02.42,Serifa Std,,0,0,1,,{\fs22.5}But there are stil
 Dialogue: 0,0:01:01.32,0:01:02.42,Serifa Std,,0,0,410,,Hmm...
 Dialogue: 0,0:01:03.43,0:01:08.26,Serifa Std,,0,0,0,,Are you thinking about Mr. Crowley again?
 Dialogue: 0,0:01:08.26,0:01:13.60,Serifa Std,,0,0,0,,{\fs29}After all, maybe we're no different from Mr. Crowley.
-Dialogue: 0,0:01:13.60,0:01:20.68,Serifa Std,,0,0,1,,{\fs22.5}If we'd taken one wrong step,\Nwe could've ended up like Mr. Crowley...
-Dialogue: 0,0:01:17.14,0:01:20.68,Serifa Std,,0,0,410,,We won’t make that mistake.
+Dialogue: 0,0:01:13.60,0:01:17.17,Serifa Std,,0,0,1,,{\fs22.5}If we'd taken one wrong step,\Nwe could've ended up like Mr. Crowley...
+Dialogue: 0,0:01:17.17,0:01:20.68,Serifa Std,,0,0,0,,We won’t make that mistake.
 Dialogue: 0,0:01:21.68,0:01:31.52,Serifa Std,,0,0,1,,{\fs22.5}We would not take that wrong step.\NWe will never sacrifice anyone else for our own sake.
 Dialogue: 0,0:01:31.52,0:01:33.06,Serifa Std,,0,0,0,,Brother...
 Dialogue: 0,0:01:33.06,0:01:39.29,Serifa Std,,0,0,1,,{\fs22.5}Sacrificing others for your own happiness isn't an equivalent exchange.
