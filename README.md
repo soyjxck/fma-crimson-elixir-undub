@@ -38,7 +38,7 @@ xdelta3 -d -s "usa.iso" FMA2_Undub.xdelta "FMA2_Undub.iso"
 
 Build from both ISOs. Auto-compiles ffmpeg with subtitle support on first run.
 
-**Requirements**: Python 3.9+, both ISOs, platform build tools
+**Requirements**: Python 3.10+, both ISOs, platform build tools
 
 ```bash
 git clone https://github.com/soyjxck/fma-crimson-elixir-undub.git

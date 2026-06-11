@@ -5,14 +5,17 @@ Provides functions to locate files within a PS2 ISO image and verify
 ISO integrity via MD5 hash checking.
 """
 
-import struct
-import os
+from __future__ import annotations
+
 import hashlib
+import os
+import struct
+from typing import IO
 
-from .constants import SECTOR
+from .constants import IsoHashes
 
 
-def find_file_in_iso(iso_data, filename):
+def find_file_in_iso(iso_data: bytes, filename: bytes | str) -> tuple[int, int, int] | None:
     """Find a file's sector, size, and directory entry offset in an ISO.
 
     Searches for the filename in the ISO9660 directory entries and returns
@@ -31,12 +34,12 @@ def find_file_in_iso(iso_data, filename):
     if pos < 0:
         return None
     entry = pos - 33
-    sector = struct.unpack('<I', iso_data[entry + 2:entry + 6])[0]
-    size = struct.unpack('<I', iso_data[entry + 10:entry + 14])[0]
+    sector = struct.unpack("<I", iso_data[entry + 2 : entry + 6])[0]
+    size = struct.unpack("<I", iso_data[entry + 10 : entry + 14])[0]
     return sector, size, entry
 
 
-def update_dir_entry(f, entry_offset, sector, size):
+def update_dir_entry(f: IO[bytes], entry_offset: int, sector: int, size: int) -> None:
     """Update an ISO9660 directory entry's sector and size (both LE and BE).
 
     Args:
@@ -46,14 +49,14 @@ def update_dir_entry(f, entry_offset, sector, size):
         size: New file size in bytes.
     """
     f.seek(entry_offset + 2)
-    f.write(struct.pack('<I', sector))
-    f.write(struct.pack('>I', sector))
+    f.write(struct.pack("<I", sector))
+    f.write(struct.pack(">I", sector))
     f.seek(entry_offset + 10)
-    f.write(struct.pack('<I', size))
-    f.write(struct.pack('>I', size))
+    f.write(struct.pack("<I", size))
+    f.write(struct.pack(">I", size))
 
 
-def verify_iso(path, label, expected, skip=False):
+def verify_iso(path: str, label: str, expected: IsoHashes, skip: bool = False) -> bool:
     """Verify an ISO file's size and MD5 hash.
 
     Args:
@@ -66,22 +69,22 @@ def verify_iso(path, label, expected, skip=False):
         True if verification passed (or was skipped).
     """
     size = os.path.getsize(path)
-    if size != expected['size']:
+    if size != expected["size"]:
         print(f"  WARNING: {label} size mismatch ({size:,} vs {expected['size']:,})")
 
     if skip:
         return True
 
-    print(f"  Verifying {label}...", end=' ', flush=True)
+    print(f"  Verifying {label}...", end=" ", flush=True)
     md5_hash = hashlib.md5()
-    with open(path, 'rb') as f:
+    with open(path, "rb") as f:
         while chunk := f.read(64 * 1024 * 1024):
             md5_hash.update(chunk)
     md5 = md5_hash.hexdigest()
-    if md5 == expected['md5']:
+    if md5 == expected["md5"]:
         print("OK")
         return True
     else:
         print(f"MISMATCH (got {md5})")
-        print(f"  Your ISO may be a different dump. Proceeding anyway...")
+        print("  Your ISO may be a different dump. Proceeding anyway...")
         return False

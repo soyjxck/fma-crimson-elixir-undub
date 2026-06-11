@@ -7,6 +7,8 @@ This module handles:
 3. MKV export with JP audio
 """
 
+from __future__ import annotations
+
 import os
 import re
 import shutil
@@ -16,16 +18,16 @@ import tempfile
 from dsi_muxer import DSI
 
 _FONT_DIRS = [
-    os.path.expanduser('~/Library/Fonts'),
-    '/Library/Fonts',
-    '/System/Library/Fonts',
-    '/System/Library/Fonts/Supplemental',
-    '/usr/share/fonts',
-    '/usr/local/share/fonts',
+    os.path.expanduser("~/Library/Fonts"),
+    "/Library/Fonts",
+    "/System/Library/Fonts",
+    "/System/Library/Fonts/Supplemental",
+    "/usr/share/fonts",
+    "/usr/local/share/fonts",
 ]
 
 
-def _find_fontsdir():
+def _find_fontsdir() -> str | None:
     """Find a directory containing fonts for subtitle rendering."""
     for d in _FONT_DIRS:
         if os.path.isdir(d):
@@ -37,7 +39,8 @@ def _find_fontsdir():
 # MPEG-2 Encoding
 # =============================================================================
 
-def encode_subtitled_video(ffmpeg_bin, m2v_path, ass_path, output_path):
+
+def encode_subtitled_video(ffmpeg_bin: str, m2v_path: str, ass_path: str, output_path: str) -> bool:
     """Encode video with burned ASS subtitles as PS2-compatible MPEG-2.
 
     Uses high-quality CBR encoding at 7500k — no size constraint since
@@ -55,54 +58,103 @@ def encode_subtitled_video(ffmpeg_bin, m2v_path, ass_path, output_path):
     Raises:
         RuntimeError: If libass reports missing fonts.
     """
-    ass_filter = f'ass={ass_path}'
+    ass_filter = f"ass={ass_path}"
     fontsdir = _find_fontsdir()
     if fontsdir:
-        ass_filter += f':fontsdir={fontsdir}'
+        ass_filter += f":fontsdir={fontsdir}"
 
-    r = subprocess.run([ffmpeg_bin, '-y', '-i', m2v_path,
-        '-vf', f'{ass_filter},format=yuv420p',
-        '-c:v', 'mpeg2video',
-        '-b:v', '7500k', '-minrate', '7500k', '-maxrate', '7500k',
-        '-bufsize', '1835008', '-qmin', '1', '-qmax', '12',
-        '-s', '512x448', '-sar', '7:6', '-r', '30000/1001',
-        '-g', '16', '-bf', '2', '-b_strategy', '0',
-        '-mpv_flags', '+strict_gop', '-dc', '9',
-        '-intra_vlc', '1', '-non_linear_quant', '1',
-        '-i_qfactor', '0.4', '-b_qfactor', '4.0',
-        '-color_primaries', '5', '-color_trc', '5', '-colorspace', '4',
-        '-video_format', 'ntsc',
-        '-an', output_path], capture_output=True, text=True, timeout=600)
+    r = subprocess.run(
+        [
+            ffmpeg_bin,
+            "-y",
+            "-i",
+            m2v_path,
+            "-vf",
+            f"{ass_filter},format=yuv420p",
+            "-c:v",
+            "mpeg2video",
+            "-b:v",
+            "7500k",
+            "-minrate",
+            "7500k",
+            "-maxrate",
+            "7500k",
+            "-bufsize",
+            "1835008",
+            "-qmin",
+            "1",
+            "-qmax",
+            "12",
+            "-s",
+            "512x448",
+            "-sar",
+            "7:6",
+            "-r",
+            "30000/1001",
+            "-g",
+            "16",
+            "-bf",
+            "2",
+            "-b_strategy",
+            "0",
+            "-mpv_flags",
+            "+strict_gop",
+            "-dc",
+            "9",
+            "-intra_vlc",
+            "1",
+            "-non_linear_quant",
+            "1",
+            "-i_qfactor",
+            "0.4",
+            "-b_qfactor",
+            "4.0",
+            "-color_primaries",
+            "5",
+            "-color_trc",
+            "5",
+            "-colorspace",
+            "4",
+            "-video_format",
+            "ntsc",
+            "-an",
+            output_path,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=600,
+    )
 
     # Check for missing font warnings from libass
-    if r.stderr and 'fontselect' in r.stderr.lower() and 'failed' in r.stderr.lower():
+    if r.stderr and "fontselect" in r.stderr.lower() and "failed" in r.stderr.lower():
         fonts = re.findall(r"Glyph.*?font '([^']+)'", r.stderr)
         if not fonts:
             fonts = re.findall(r"(?:fontselect|SelectFont).*?'([^']+)'", r.stderr)
         raise RuntimeError(
             f"Missing fonts for subtitle rendering: {', '.join(set(fonts)) or 'unknown'}\n"
-            f"  Install them to ~/Library/Fonts (macOS) or /usr/share/fonts (Linux)")
+            f"  Install them to ~/Library/Fonts (macOS) or /usr/share/fonts (Linux)"
+        )
 
     if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
         return False
 
     # Ensure end-of-sequence marker exists (trailing stuffing is added
     # by the muxer's ensure_end_of_sequence).
-    with open(output_path, 'rb') as f:
+    with open(output_path, "rb") as f:
         vid = bytearray(f.read())
-    if vid.rfind(b'\x00\x00\x01\xb7') < 0:
+    if vid.rfind(b"\x00\x00\x01\xb7") < 0:
         last = len(vid)
         while last > 0 and vid[last - 1] == 0:
             last -= 1
         vid = vid[:last]
-        vid.extend(b'\x00\x00\x01\xb7')
-        with open(output_path, 'wb') as f:
+        vid.extend(b"\x00\x00\x01\xb7")
+        with open(output_path, "wb") as f:
             f.write(vid)
 
     return True
 
 
-def build_subtitled_dsi(ffmpeg_bin, jp_dsi_bytes, ass_path):
+def build_subtitled_dsi(ffmpeg_bin: str, jp_dsi_bytes: bytes, ass_path: str) -> bytes | None:
     """Build a subtitled DSI from JP DSI bytes and an ASS subtitle file.
 
     Pipeline:
@@ -117,23 +169,24 @@ def build_subtitled_dsi(ffmpeg_bin, jp_dsi_bytes, ass_path):
     audio = dsi.extract_audio()
 
     with tempfile.TemporaryDirectory() as tmp:
-        m2v_in = os.path.join(tmp, 'input.m2v')
-        m2v_out = os.path.join(tmp, 'output.m2v')
+        m2v_in = os.path.join(tmp, "input.m2v")
+        m2v_out = os.path.join(tmp, "output.m2v")
 
-        with open(m2v_in, 'wb') as f:
+        with open(m2v_in, "wb") as f:
             f.write(video)
 
         if not encode_subtitled_video(ffmpeg_bin, m2v_in, ass_path, m2v_out):
             return None
 
-        with open(m2v_out, 'rb') as f:
+        with open(m2v_out, "rb") as f:
             new_video = f.read()
 
     new_dsi = DSI.mux(new_video, audio)
-    return new_dsi.to_bytes()
+    result: bytes = new_dsi.to_bytes()
+    return result
 
 
-def dump_mkv(ffmpeg_bin, m2v_path, jp_audio, mkv_path):
+def dump_mkv(ffmpeg_bin: str, m2v_path: str, jp_audio: bytes, mkv_path: str) -> None:
     """Export a subtitled cutscene as MKV with JP audio.
 
     Args:
@@ -143,32 +196,72 @@ def dump_mkv(ffmpeg_bin, m2v_path, jp_audio, mkv_path):
         mkv_path: Output MKV path.
     """
     with tempfile.TemporaryDirectory() as tmp:
-        adpcm_path = os.path.join(tmp, 'audio.adpcm')
-        txth_path = adpcm_path + '.txth'
-        wav_path = os.path.join(tmp, 'audio.wav')
+        adpcm_path = os.path.join(tmp, "audio.adpcm")
+        txth_path = adpcm_path + ".txth"
+        wav_path = os.path.join(tmp, "audio.wav")
 
-        with open(adpcm_path, 'wb') as f:
+        with open(adpcm_path, "wb") as f:
             f.write(jp_audio)
-        with open(txth_path, 'w') as f:
-            f.write('codec = PSX\nchannels = 2\nsample_rate = 48000\n'
-                    'interleave = 0x100\nnum_samples = data_size\n')
+        with open(txth_path, "w") as f:
+            f.write(
+                "codec = PSX\nchannels = 2\nsample_rate = 48000\n"
+                "interleave = 0x100\nnum_samples = data_size\n"
+            )
 
-        vgmstream = shutil.which('vgmstream-cli')
-        for p in ['/opt/homebrew/bin/vgmstream-cli', '/usr/local/bin/vgmstream-cli']:
+        vgmstream = shutil.which("vgmstream-cli")
+        for p in ["/opt/homebrew/bin/vgmstream-cli", "/usr/local/bin/vgmstream-cli"]:
             if not vgmstream and os.path.exists(p):
                 vgmstream = p
         if vgmstream:
-            subprocess.run([vgmstream, '-o', wav_path, adpcm_path],
-                           capture_output=True, timeout=120)
+            subprocess.run(
+                [vgmstream, "-o", wav_path, adpcm_path], capture_output=True, timeout=120
+            )
 
         if os.path.exists(wav_path):
-            subprocess.run([ffmpeg_bin, '-y', '-i', m2v_path, '-i', wav_path,
-                '-c:v', 'libx264', '-crf', '18', '-preset', 'fast',
-                '-c:a', 'aac', '-b:a', '192k',
-                '-r', '30000/1001', '-shortest', mkv_path],
-                capture_output=True, timeout=300)
+            subprocess.run(
+                [
+                    ffmpeg_bin,
+                    "-y",
+                    "-i",
+                    m2v_path,
+                    "-i",
+                    wav_path,
+                    "-c:v",
+                    "libx264",
+                    "-crf",
+                    "18",
+                    "-preset",
+                    "fast",
+                    "-c:a",
+                    "aac",
+                    "-b:a",
+                    "192k",
+                    "-r",
+                    "30000/1001",
+                    "-shortest",
+                    mkv_path,
+                ],
+                capture_output=True,
+                timeout=300,
+            )
         else:
-            subprocess.run([ffmpeg_bin, '-y', '-i', m2v_path,
-                '-c:v', 'libx264', '-crf', '18', '-preset', 'fast',
-                '-r', '30000/1001', '-an', mkv_path],
-                capture_output=True, timeout=300)
+            subprocess.run(
+                [
+                    ffmpeg_bin,
+                    "-y",
+                    "-i",
+                    m2v_path,
+                    "-c:v",
+                    "libx264",
+                    "-crf",
+                    "18",
+                    "-preset",
+                    "fast",
+                    "-r",
+                    "30000/1001",
+                    "-an",
+                    mkv_path,
+                ],
+                capture_output=True,
+                timeout=300,
+            )
