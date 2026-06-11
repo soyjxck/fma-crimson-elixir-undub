@@ -182,8 +182,7 @@ def build_subtitled_dsi(ffmpeg_bin: str, jp_dsi_bytes: bytes, ass_path: str) -> 
             new_video = f.read()
 
     new_dsi = DSI.mux(new_video, audio)
-    result: bytes = new_dsi.to_bytes()
-    return result
+    return new_dsi.to_bytes()
 
 
 def dump_mkv(ffmpeg_bin: str, m2v_path: str, jp_audio: bytes, mkv_path: str) -> None:
