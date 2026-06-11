@@ -9,13 +9,13 @@ YCbCr Matrix: TV.FCC
 PlayResX: 512
 PlayResY: 448
 
-[Aegisub Project by GXZ95]
+[Aegisub Project Garbage]
 Audio File: MV02.mkv
 Video File: MV02.mkv
 Video AR Mode: 4
 Video AR Value: 1.333333
-Active Line: 2
-Video Position: 313
+Active Line: 1
+Video Position: 335
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
@@ -26,7 +26,7 @@ Style: Serifa Std,Serifa Std,30,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,-1,0
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:03.17,0:00:06.24,Serifa Std,,0,0,0,,Wrong way, brother! This way, this way!
-Dialogue: 0,0:00:08.34,0:00:10.44,Serifa Std,,0,0,0,,H-Hey, what are you doing...?
+Dialogue: 0,0:00:07.80,0:00:10.44,Serifa Std,,0,0,0,,H-Hey, what are you doing...?
 Dialogue: 0,0:00:10.44,0:00:12.54,Serifa Std,,0,0,0,,Brother, look.
 Dialogue: 0,0:00:15.01,0:00:18.05,Serifa Std,,0,0,0,,Who are... you?
 Dialogue: 0,0:00:49.08,0:00:51.25,Serifa Std,,0,0,0,,Brother!
