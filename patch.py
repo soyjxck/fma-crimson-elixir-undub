@@ -39,6 +39,8 @@ from lib.constants import (
     SCEI_BANK_INDICES,
     SECTOR,
     SUBS_DIR,
+    XA_TRACK_COUNT,
+    XA_TRACK_RECORDS_OFFSET,
 )
 from lib.ffmpeg import find_or_build_ffmpeg
 from lib.iso import find_file_in_iso, update_dir_entry, verify_iso
@@ -49,8 +51,22 @@ from lib.video import build_subtitled_dsi, dump_mkv
 # =============================================================================
 
 
-def do_audio(usa_iso_path: str, jp_iso_path: str, out_iso_path: str) -> None:
-    """Audio-only undub: JP XA.PAK + JP DSI + JP combat banks, no subtitles."""
+def do_audio(
+    usa_iso_path: str,
+    jp_iso_path: str,
+    out_iso_path: str,
+    dsi_files: dict[str, str] | None = None,
+) -> None:
+    """Core patcher: JP XA.PAK + JP combat banks + JP (or subtitled) cutscenes.
+
+    Preserves the retail file order: CFC.DIG grows in place to hold the
+    patched track table and JP combat banks, then XA.PAK, the 12 cutscenes,
+    and DATA0 follow sequentially, shifted to later sectors as needed.
+
+    Args:
+        dsi_files: Optional {name: path} of pre-built subtitled DSI files
+            written in place of the raw JP cutscenes (used by full mode).
+    """
     print("Reading JP ISO...")
     with open(jp_iso_path, "rb") as f:
         jp_data = f.read()
@@ -65,11 +81,20 @@ def do_audio(usa_iso_path: str, jp_iso_path: str, out_iso_path: str) -> None:
 
     usa_cfc_info = find_file_in_iso(iso_header, b"CFC.DIG;1")
     assert usa_cfc_info is not None, "CFC.DIG not found in USA ISO"
-    usa_cfc_sector = usa_cfc_info[0]
+    usa_cfc_sector, usa_cfc_size, usa_cfc_entry = usa_cfc_info
 
     jp_cfc_info = find_file_in_iso(jp_data[: 10 * 1024 * 1024], b"CFC.DIG;1")
     assert jp_cfc_info is not None, "CFC.DIG not found in JP ISO"
     jp_cfc_sector = jp_cfc_info[0]
+
+    # The shifted layout overwrites DATA0's original location before DATA0
+    # is re-written at the end, so grab its contents up front
+    data0_info = find_file_in_iso(iso_header, b"DATA0")
+    data0_content = b""
+    if data0_info:
+        with open(out_iso_path, "rb") as f:
+            f.seek(data0_info[0] * SECTOR)
+            data0_content = f.read(data0_info[1])
 
     # --- Step 1: Patch XA track offset table ---
     print(f"\n{'=' * 60}")
@@ -93,71 +118,87 @@ def do_audio(usa_iso_path: str, jp_iso_path: str, out_iso_path: str) -> None:
 
     patched = bytearray(usa_decomp)
     changed = 0
-    for t in range(2016):
+    for t in range(XA_TRACK_COUNT):
         eoff = 0x30 + t * 0x10
         if jp_decomp[eoff : eoff + 8] != usa_decomp[eoff : eoff + 8]:
             patched[eoff : eoff + 8] = jp_decomp[eoff : eoff + 8]
             changed += 1
 
+    # The audio data is JP, so its playback records (pitch, gain, channel
+    # count) must be JP too — USA records flip mono/stereo on 15 tracks,
+    # which hangs the IOP streamer on real hardware
+    rec_changed = 0
+    for t in range(XA_TRACK_COUNT):
+        roff = XA_TRACK_RECORDS_OFFSET + t * 8
+        if jp_decomp[roff : roff + 8] != usa_decomp[roff : roff + 8]:
+            patched[roff : roff + 8] = jp_decomp[roff : roff + 8]
+            rec_changed += 1
+
     cfc2_comp = compress(bytes(patched))
     cfc2_sectors = (len(cfc2_comp) + SECTOR - 1) // SECTOR
-    print(f"  Patched {changed}/2016 track offsets")
+    print(f"  Patched {changed}/{XA_TRACK_COUNT} track offsets")
+    print(f"  Patched {rec_changed}/{XA_TRACK_COUNT} playback records")
 
-    # --- Step 2: Write compacted ISO layout ---
+    # --- Step 2: Grow CFC.DIG in place (track table + combat banks) ---
     print(f"\n{'=' * 60}")
-    print("Step 2: Write compacted ISO layout")
+    print("Step 2: Grow CFC.DIG (track table + combat banks)")
     print(f"{'=' * 60}")
 
-    write_sector = 92828
+    write_sector = usa_cfc_sector + (usa_cfc_size + SECTOR - 1) // SECTOR
+    banks_patched = 0
 
-    # Track table
-    cfc2_rel_sector = write_sector - usa_cfc_sector
     with open(out_iso_path, "r+b") as f:
+        # Patched track table goes right after the retail CFC.DIG data
         f.seek(write_sector * SECTOR)
         f.write(cfc2_comp)
         f.write(b"\x00" * (cfc2_sectors * SECTOR - len(cfc2_comp)))
         f.seek(usa_cfc_sector * SECTOR + CFC_TRACK_TABLE_DIR_OFFSET)
-        f.write(struct.pack("<I", cfc2_rel_sector))
+        f.write(struct.pack("<I", write_sector - usa_cfc_sector))
         f.write(struct.pack("<I", len(cfc2_comp)))
-    write_sector += cfc2_sectors
-    print(f"  Track table: {cfc2_sectors} sectors")
+        write_sector += cfc2_sectors
+        print(f"  Track table: {cfc2_sectors} sectors")
 
-    # DSI cutscenes (full JP, no truncation)
-    for name in DSI_NAMES:
-        needle = f"{name}.DSI;1".encode()
-        usa_info = find_file_in_iso(iso_header, needle)
-        jp_pos = jp_data.find(needle)
-        if not usa_info or jp_pos < 0:
-            continue
-        jp_entry = jp_pos - 33
-        jp_sec = struct.unpack("<I", jp_data[jp_entry + 2 : jp_entry + 6])[0]
-        jp_sz = struct.unpack("<I", jp_data[jp_entry + 10 : jp_entry + 14])[0]
+        # JP combat bark SCEI banks, appended inside the grown CFC.DIG
+        for idx in SCEI_BANK_INDICES:
+            jp_entry_off = jp_cfc_sector * SECTOR + idx * 16
+            jp_s, jp_c, jp_f, jp_d = struct.unpack(
+                "<IIII", jp_data[jp_entry_off : jp_entry_off + 16]
+            )
+            if jp_s == 0 or jp_c == 0:
+                continue
+            usa_entry_off = usa_cfc_sector * SECTOR + idx * 16
+            _usa_s, usa_c = struct.unpack("<II", iso_header[usa_entry_off : usa_entry_off + 8])
+            if usa_c == jp_c:
+                continue
 
-        with open(out_iso_path, "r+b") as f:
+            jp_off = jp_cfc_sector * SECTOR + jp_s * SECTOR
+            jp_sectors = (jp_c + SECTOR - 1) // SECTOR
             f.seek(write_sector * SECTOR)
-            f.write(jp_data[jp_sec * SECTOR : jp_sec * SECTOR + jp_sz])
-            pad = (SECTOR - (jp_sz % SECTOR)) % SECTOR
-            if pad:
-                f.write(b"\x00" * pad)
-            update_dir_entry(f, usa_info[2], write_sector, jp_sz)
+            f.write(jp_data[jp_off : jp_off + jp_c])
+            f.write(b"\x00" * (jp_sectors * SECTOR - jp_c))
 
-        file_sectors = (jp_sz + SECTOR - 1) // SECTOR
-        print(f"  {name}: {jp_sz / 1024 / 1024:.1f} MB")
-        write_sector += file_sectors
+            # Full JP entry: comp size, flags, decomp size. The flags high
+            # half tells the game whether to run the racjin decompressor —
+            # bank 324 is compressed in USA but raw in JP, so keeping USA
+            # flags makes the game "decompress" raw ADPCM into garbage.
+            f.seek(usa_entry_off)
+            f.write(struct.pack("<IIII", write_sector - usa_cfc_sector, jp_c, jp_f, jp_d))
 
-    # DATA0
-    data0_info = find_file_in_iso(iso_header, b"DATA0")
-    if data0_info:
-        with open(out_iso_path, "rb") as f:
-            f.seek(data0_info[0] * SECTOR)
-            data0_content = f.read(data0_info[1])
-        with open(out_iso_path, "r+b") as f:
-            f.seek(write_sector * SECTOR)
-            f.write(data0_content)
-            update_dir_entry(f, data0_info[2], write_sector, data0_info[1])
-        write_sector += (data0_info[1] + SECTOR - 1) // SECTOR
+            write_sector += jp_sectors
+            banks_patched += 1
 
-    # Full JP XA.PAK
+        # CFC.DIG now extends to the end of the banks
+        cfc_new_size = (write_sector - usa_cfc_sector) * SECTOR
+        update_dir_entry(f, usa_cfc_entry, usa_cfc_sector, cfc_new_size)
+
+    print(f"  {banks_patched} banks replaced")
+    print(f"  CFC.DIG: {usa_cfc_size / 1024 / 1024:.0f} MB -> {cfc_new_size / 1024 / 1024:.0f} MB")
+
+    # --- Step 3: Shift XA.PAK, cutscenes, DATA0 ---
+    print(f"\n{'=' * 60}")
+    print("Step 3: Shift XA.PAK, cutscenes, DATA0")
+    print(f"{'=' * 60}")
+
     jp_xa_info = find_file_in_iso(jp_data[: 10 * 1024 * 1024], b"XA.PAK;1")
     usa_xa_info = find_file_in_iso(iso_header, b"XA.PAK;1")
     assert jp_xa_info is not None, "XA.PAK not found in JP ISO"
@@ -165,9 +206,10 @@ def do_audio(usa_iso_path: str, jp_iso_path: str, out_iso_path: str) -> None:
     jp_xa_sz = jp_xa_info[1]
 
     with open(out_iso_path, "r+b") as f:
+        # Full JP XA.PAK, immediately after the grown CFC.DIG
         f.seek(write_sector * SECTOR)
-        remaining = jp_xa_sz
         src = jp_xa_info[0] * SECTOR
+        remaining = jp_xa_sz
         while remaining > 0:
             chunk = min(remaining, 64 * 1024 * 1024)
             f.write(jp_data[src : src + chunk])
@@ -177,68 +219,52 @@ def do_audio(usa_iso_path: str, jp_iso_path: str, out_iso_path: str) -> None:
         if pad:
             f.write(b"\x00" * pad)
         update_dir_entry(f, usa_xa_info[2], write_sector, jp_xa_sz)
+        write_sector += (jp_xa_sz + SECTOR - 1) // SECTOR
+        print(f"  XA.PAK: {jp_xa_sz / 1024 / 1024:.0f} MB")
 
-    print(f"  XA.PAK: {jp_xa_sz / 1024 / 1024:.0f} MB")
-
-    # --- Step 3: Combat bark SCEI banks ---
-    print(f"\n{'=' * 60}")
-    print("Step 3: Combat bark SCEI banks")
-    print(f"{'=' * 60}")
-
-    banks_patched = 0
-    last_cfc_sector = 92828 + cfc2_sectors
-
-    with open(out_iso_path, "r+b") as f:
-        for idx in SCEI_BANK_INDICES:
-            jp_s, jp_c, _jp_f, jp_d = struct.unpack(
-                "<IIII",
-                jp_data[jp_cfc_sector * SECTOR + idx * 16 : jp_cfc_sector * SECTOR + idx * 16 + 16],
-            )
-            if jp_s == 0 or jp_c == 0:
-                continue
-            _usa_s, usa_c = struct.unpack(
-                "<II",
-                iso_header[
-                    usa_cfc_sector * SECTOR + idx * 16 : usa_cfc_sector * SECTOR + idx * 16 + 8
-                ],
-            )
-            if usa_c == jp_c:
+        # Cutscenes in retail order, each at its natural size
+        for name in DSI_NAMES:
+            needle = f"{name}.DSI;1".encode()
+            usa_info = find_file_in_iso(iso_header, needle)
+            jp_pos = jp_data.find(needle)
+            if not usa_info or jp_pos < 0:
                 continue
 
-            jp_raw = jp_data[
-                jp_cfc_sector * SECTOR + jp_s * SECTOR : jp_cfc_sector * SECTOR
-                + jp_s * SECTOR
-                + jp_c
-            ]
+            sub_path = dsi_files.get(name) if dsi_files else None
+            f.seek(write_sector * SECTOR)
+            if sub_path:
+                sz = os.path.getsize(sub_path)
+                with open(sub_path, "rb") as sf:
+                    shutil.copyfileobj(sf, f, 64 * 1024 * 1024)
+                label = "subtitled"
+            else:
+                jp_entry = jp_pos - 33
+                jp_sec = struct.unpack("<I", jp_data[jp_entry + 2 : jp_entry + 6])[0]
+                sz = struct.unpack("<I", jp_data[jp_entry + 10 : jp_entry + 14])[0]
+                f.write(jp_data[jp_sec * SECTOR : jp_sec * SECTOR + sz])
+                label = "JP"
+            pad = (SECTOR - (sz % SECTOR)) % SECTOR
+            if pad:
+                f.write(b"\x00" * pad)
+            update_dir_entry(f, usa_info[2], write_sector, sz)
+            write_sector += (sz + SECTOR - 1) // SECTOR
+            print(f"  {name}: {sz / 1024 / 1024:.1f} MB ({label})")
 
-            f.seek(0, 2)
-            pos = f.tell()
-            new_abs_sector = (pos + SECTOR - 1) // SECTOR
-            new_rel_sector = new_abs_sector - usa_cfc_sector
-            jp_sectors = (jp_c + SECTOR - 1) // SECTOR
+        # DATA0 last, matching retail order
+        if data0_info:
+            f.seek(write_sector * SECTOR)
+            f.write(data0_content)
+            pad = (SECTOR - (len(data0_content) % SECTOR)) % SECTOR
+            if pad:
+                f.write(b"\x00" * pad)
+            update_dir_entry(f, data0_info[2], write_sector, len(data0_content))
+            write_sector += (len(data0_content) + SECTOR - 1) // SECTOR
 
-            f.seek(new_abs_sector * SECTOR)
-            f.write(jp_raw)
-            f.write(b"\x00" * (jp_sectors * SECTOR - jp_c))
-
-            f.seek(usa_cfc_sector * SECTOR + idx * 16)
-            f.write(struct.pack("<I", new_rel_sector))
-            f.write(struct.pack("<I", jp_c))
-            f.seek(usa_cfc_sector * SECTOR + idx * 16 + 12)
-            f.write(struct.pack("<I", jp_d))
-
-            cfc_end = new_abs_sector + jp_sectors
-            if cfc_end > last_cfc_sector:
-                last_cfc_sector = cfc_end
-
-            banks_patched += 1
-
-    print(f"  {banks_patched} banks replaced")
-
-    # Update CFC.DIG size
-    cfc_new_size = (last_cfc_sector - usa_cfc_sector) * SECTOR
-    with open(out_iso_path, "r+b") as f:
-        update_dir_entry(f, usa_cfc_info[2], usa_cfc_sector, cfc_new_size)
+        # Real PS2 drives hang on reads that run past the end of the image,
+        # so drop any stale tail and leave a 1MB zero margin
+        f.truncate(write_sector * SECTOR)
+        f.seek(write_sector * SECTOR)
+        f.write(b"\x00" * (512 * SECTOR))
 
     print(f"\n  Output: {out_iso_path} ({os.path.getsize(out_iso_path) / 1024 / 1024:.0f} MB)")
 
@@ -246,86 +272,69 @@ def do_audio(usa_iso_path: str, jp_iso_path: str, out_iso_path: str) -> None:
 def do_full(
     usa_iso_path: str, jp_iso_path: str, out_iso_path: str, dump_mkv_dir: str | None = None
 ) -> None:
-    """Full pipeline: audio-only patching + burned English subtitles on cutscenes."""
-    do_audio(usa_iso_path, jp_iso_path, out_iso_path)
-
-    if dump_mkv_dir:
-        os.makedirs(dump_mkv_dir, exist_ok=True)
-
-    print(f"\n{'=' * 60}")
-    print("Step 4: Burn subtitles onto cutscenes")
-    print(f"{'=' * 60}")
-
+    """Full pipeline: burn English subtitles onto the JP cutscenes, then
+    write the patched ISO with the subtitled DSIs at their natural sizes."""
     ffmpeg_bin = find_or_build_ffmpeg()
     if not ffmpeg_bin:
         print("  ERROR: ffmpeg with libass not available — cannot burn subtitles.")
         print("  Use `patch.py audio` if you only want audio undub without subtitles.")
         sys.exit(1)
 
-    with open(out_iso_path, "rb") as f:
-        iso_header = f.read(10 * 1024 * 1024)
+    if dump_mkv_dir:
+        os.makedirs(dump_mkv_dir, exist_ok=True)
 
-    for name in DSI_NAMES:
-        ass_path = os.path.join(SUBS_DIR, f"{name}.ass")
-        if not os.path.exists(ass_path):
-            continue
-        with open(ass_path) as f:
-            if "Dialogue:" not in f.read():
+    print(f"\n{'=' * 60}")
+    print("Burning subtitles onto cutscenes")
+    print(f"{'=' * 60}")
+
+    with open(jp_iso_path, "rb") as f:
+        jp_header = f.read(10 * 1024 * 1024)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        dsi_files: dict[str, str] = {}
+        for name in DSI_NAMES:
+            ass_path = os.path.join(SUBS_DIR, f"{name}.ass")
+            if not os.path.exists(ass_path):
+                continue
+            with open(ass_path) as f:
+                if "Dialogue:" not in f.read():
+                    continue
+
+            jp_info = find_file_in_iso(jp_header, f"{name}.DSI;1".encode())
+            if not jp_info:
+                continue
+            with open(jp_iso_path, "rb") as f:
+                f.seek(jp_info[0] * SECTOR)
+                jp_dsi_bytes = f.read(jp_info[1])
+
+            sub_dsi = build_subtitled_dsi(ffmpeg_bin, jp_dsi_bytes, ass_path)
+
+            # Export MKV if requested
+            if dump_mkv_dir and sub_dsi is not None:
+                src = DSI.from_bytes(jp_dsi_bytes)
+                audio = src.extract_audio()
+                sub = DSI.from_bytes(sub_dsi)
+                video_bytes = sub.extract_video()
+                with tempfile.NamedTemporaryFile(suffix=".m2v", delete=False) as mf:
+                    mf.write(video_bytes)
+                    m2v_path = mf.name
+                mkv_path = os.path.join(dump_mkv_dir, f"{name}.mkv")
+                dump_mkv(ffmpeg_bin, m2v_path, audio, mkv_path)
+                os.unlink(m2v_path)
+                if os.path.exists(mkv_path):
+                    print(f"    -> {mkv_path}")
+
+            if sub_dsi is None:
+                print(f"  {name}: subtitle burn failed, keeping audio-only")
                 continue
 
-        # Find current DSI location in our patched ISO
-        usa_info = find_file_in_iso(iso_header, f"{name}.DSI;1".encode())
-        if not usa_info:
-            continue
-        cur_sector = usa_info[0]
-        cur_size = usa_info[1]
-
-        # Build subtitled DSI from the JP DSI currently in our ISO
-        with open(out_iso_path, "rb") as f:
-            f.seek(cur_sector * SECTOR)
-            jp_dsi_bytes = f.read(cur_size)
-
-        sub_dsi = build_subtitled_dsi(ffmpeg_bin, jp_dsi_bytes, ass_path)
-
-        # Export MKV if requested
-        if dump_mkv_dir and sub_dsi is not None:
-            src = DSI.from_bytes(jp_dsi_bytes)
-            audio = src.extract_audio()
-            sub = DSI.from_bytes(sub_dsi)
-            video_bytes = sub.extract_video()
-            with tempfile.NamedTemporaryFile(suffix=".m2v", delete=False) as mf:
-                mf.write(video_bytes)
-                m2v_path = mf.name
-            mkv_path = os.path.join(dump_mkv_dir, f"{name}.mkv")
-            dump_mkv(ffmpeg_bin, m2v_path, audio, mkv_path)
-            os.unlink(m2v_path)
-            if os.path.exists(mkv_path):
-                print(f"    -> {mkv_path}")
-
-        if sub_dsi is None:
-            print(f"  {name}: subtitle burn failed, keeping audio-only")
-            continue
-
-        if len(sub_dsi) <= cur_size:
-            # Fits in place
-            with open(out_iso_path, "r+b") as f:
-                f.seek(cur_sector * SECTOR)
+            sub_path = os.path.join(tmp, f"{name}.dsi")
+            with open(sub_path, "wb") as f:
                 f.write(sub_dsi)
-                f.write(b"\x00" * (cur_size - len(sub_dsi)))
-                update_dir_entry(f, usa_info[2], cur_sector, len(sub_dsi))
+            dsi_files[name] = sub_path
             print(f"  {name}: subtitled ({len(sub_dsi) / 1024 / 1024:.1f} MB)")
-        else:
-            # Append at end
-            with open(out_iso_path, "r+b") as f:
-                f.seek(0, 2)
-                new_sector = (f.tell() + SECTOR - 1) // SECTOR
-                f.seek(new_sector * SECTOR)
-                f.write(sub_dsi)
-                pad = (SECTOR - (len(sub_dsi) % SECTOR)) % SECTOR
-                if pad:
-                    f.write(b"\x00" * pad)
-                update_dir_entry(f, usa_info[2], new_sector, len(sub_dsi))
-            print(f"  {name}: subtitled, relocated ({len(sub_dsi) / 1024 / 1024:.1f} MB)")
+
+        do_audio(usa_iso_path, jp_iso_path, out_iso_path, dsi_files=dsi_files)
 
 
 # =============================================================================

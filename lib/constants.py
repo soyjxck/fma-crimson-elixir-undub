@@ -17,6 +17,14 @@ DSI_BLOCK_SIZE = 0x40000
 # CFC.DIG entry at directory offset 0x30 contains the XA track offset table
 CFC_TRACK_TABLE_DIR_OFFSET = 0x30
 
+# Inside the track table blob: section 1 starts at 0x7E30 and holds an array
+# of 8-byte per-track playback records (id u32, pitch u16, gain u8,
+# channels u8) at +0x6148. These describe the audio data itself, so JP
+# tracks need JP records — 15 tracks flip mono/stereo between regions, and
+# a channel mismatch hangs the IOP streamer on real hardware.
+XA_TRACK_RECORDS_OFFSET = 0x7E30 + 0x6148
+XA_TRACK_COUNT = 2016
+
 # SCEI sound banks that differ between USA and JP (combat barks, voice SFX)
 SCEI_BANK_INDICES = [
     7,
