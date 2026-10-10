@@ -25,7 +25,7 @@ Style: Serifa Std,Serifa Std,30,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,-1,0
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-Dialogue: 0,0:00:08.94,0:00:10.74,Serifa Std,,0,0,0,,Watch out, Colonel!
+Dialogue: 0,0:00:08.94,0:00:10.74,Serifa Std,,0,0,0,,Watch it, Colonel!
 Dialogue: 0,0:00:10.74,0:00:12.47,Serifa Std,,0,0,0,,Brother, look!
 Dialogue: 0,0:00:11.81,0:00:12.47,Serifa Std,,0,0,410,,Huh?
 Dialogue: 0,0:00:33.40,0:00:35.13,Serifa Std,,0,0,0,,What's this? Stop it!
@@ -33,7 +33,7 @@ Dialogue: 0,0:00:35.13,0:00:37.77,Serifa Std,,0,0,0,,That thing revived.
 Dialogue: 0,0:00:37.77,0:00:41.27,Serifa Std,,0,0,0,,Damn, it hasn't been dead long enough yet.
 Dialogue: 0,0:00:41.27,0:00:44.74,Serifa Std,,0,0,0,,{\fs29}Brother, the stone! We have to find the stone after all!
 Dialogue: 0,0:00:44.74,0:00:46.51,Serifa Std,,0,0,0,,The stone? Right!
-Dialogue: 0,0:00:46.51,0:00:50.08,Serifa Std,,0,0,0,,{\fs29}We need to find that big red stone fast and destroy it!
+Dialogue: 0,0:00:46.51,0:00:50.08,Serifa Std,,0,0,0,,{\fs28.3}We need to find that giant red stone and destroy it fast!
 Dialogue: 0,0:00:50.08,0:00:53.68,Serifa Std,,0,0,0,,{\fs24.8}If you have a plan, then hurry up! I can't hold out much longer!
 Dialogue: 0,0:00:53.68,0:00:53.70,Serifa Std,,0,0,0,,{\fs24.8\pos(254.88,436.96)}If you have a plan, then hurry up! I can't hold out much longer!
 Dialogue: 0,0:00:53.70,0:00:53.74,Serifa Std,,0,0,0,,{\fs24.8\pos(255.58,437.42)}If you have a plan, then hurry up! I can't hold out much longer!
